@@ -23,10 +23,9 @@ export async function GET(req: NextRequest) {
   try {
     const statsMap = await getBatchLastGameStats(playerIds);
     // Convert Map to plain object for JSON
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of statsMap.entries()) {
-      result[String(k)] = v;
-    }
+    const result = Object.fromEntries(
+      Array.from(statsMap.entries()).map(([k, v]) => [String(k), v])
+    );
     return NextResponse.json(result);
   } catch (err) {
     console.error('[/api/stats]', err);
