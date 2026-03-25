@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  /* Court palette */
+  --color-black: #0a0a0f;
+  --color-dark: #111118;
+  --color-card: #16161f;
+  --color-border: #1e1e2a;
+  --color-muted: #2a2a38;
+  --color-text-secondary: #6b6b8a;
+  --color-text-tertiary: #3d3d55;
+
+  /* Accent neons */
+  --neon-orange: #ff6b2b;
+  --neon-blue: #00d4ff;
+  --neon-green: #00ff88;
+  --neon-red: #ff3b5c;
+
+  /* Glow shadows */
+  --glow-orange: 0 0 24px rgba(255, 107, 43, 0.35);
+  --glow-blue: 0 0 24px rgba(0, 212, 255, 0.3);
+  --glow-green: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-black);
+  color: white;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-dark); }
+::-webkit-scrollbar-thumb { background: var(--color-muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+
+/* Animated noise overlay on hero cards */
+.noise-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.4;
+  border-radius: inherit;
+}
+
+/* Shimmer skeleton */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-card) 0%,
+    var(--color-muted) 50%,
+    var(--color-card) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 1.6s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+/* Stat pill prominence levels */
+.stat-hero {
+  background: linear-gradient(135deg, rgba(255, 107, 43, 0.2), rgba(255, 107, 43, 0.08));
+  border: 1px solid rgba(255, 107, 43, 0.4);
+  color: #ff6b2b;
+}
+
+.stat-highlight {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 212, 255, 0.05));
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  color: #00d4ff;
+}
+
+.stat-standard {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.stat-negative {
+  background: rgba(255, 59, 92, 0.12);
+  border: 1px solid rgba(255, 59, 92, 0.25);
+  color: #ff3b5c;
+}
+
+/* Court lines background texture */
+.court-lines {
+  background-image:
+    radial-gradient(ellipse at 50% 100%, rgba(255, 107, 43, 0.04) 0%, transparent 70%),
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 60px 60px, 60px 60px;
+}
