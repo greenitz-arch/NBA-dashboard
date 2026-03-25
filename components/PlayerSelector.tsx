@@ -39,14 +39,14 @@ export default function PlayerSelector({ onAdd, isWatching, onClose }: PlayerSel
   // Search debounce
   useEffect(() => {
     if (!searchMode) return;
-    clearTimeout(searchTimer.current);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
     if (searchQuery.length < 2) { setSearchResults([]); return; }
     searchTimer.current = setTimeout(async () => {
       const res = await fetch(`/api/players?search=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       setSearchResults(Array.isArray(data) ? data : []);
     }, 350);
-    return () => clearTimeout(searchTimer.current);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [searchQuery, searchMode]);
 
   const loadPlayers = useCallback(async (team: Team) => {
