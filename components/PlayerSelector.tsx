@@ -25,7 +25,7 @@ export default function PlayerSelector({ onAdd, isWatching, onClose }: PlayerSel
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [searchMode, setSearchMode] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load teams on mount
   useEffect(() => {

@@ -7,8 +7,3 @@
 
 [build.environment]
   NODE_VERSION = "18"
-
-# Cron job: runs at 2 AM ET (7 AM UTC) every day
-[[scheduled-functions]]
-  name = "refresh-stats"
-  schedule = "0 7 * * *"

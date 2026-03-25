@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getTeamsByConference } from '@/lib/balldontlie';
 
-export const revalidate = 86400; // cache 24 hours
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

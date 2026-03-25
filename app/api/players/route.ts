@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPlayersByTeam, searchPlayers } from '@/lib/balldontlie';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
