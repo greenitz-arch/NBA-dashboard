@@ -22,13 +22,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const statsMap = await getBatchLastGameStats(playerIds);
-    // Convert Map to plain object for JSON
     const result = Object.fromEntries(
       Array.from(statsMap.entries()).map(([k, v]) => [String(k), v])
     );
     return NextResponse.json(result);
   } catch (err) {
     console.error('[/api/stats]', err);
-    return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
+    return NextResponse.json({}, { status: 200 });
   }
 }

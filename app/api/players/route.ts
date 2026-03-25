@@ -18,9 +18,9 @@ export async function GET(req: NextRequest) {
       const players = await getPlayersByTeam(Number(teamId));
       return NextResponse.json(players);
     }
-    return NextResponse.json({ error: 'Provide teamId or search param' }, { status: 400 });
+    return NextResponse.json([]);
   } catch (err) {
     console.error('[/api/players]', err);
-    return NextResponse.json({ error: 'Failed to fetch players' }, { status: 500 });
+    return NextResponse.json([], { status: 200 });
   }
 }
