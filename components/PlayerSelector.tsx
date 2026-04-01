@@ -213,7 +213,7 @@ export default function PlayerSelector({
           style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-3">
             {showBack && (
-              <button onClick={goBack} aria-label="Go back"
+              <button onClick={goBack} aria-label="Go back" title="Go back"
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
                 style={{ border: '1px solid var(--color-border)' }}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}
@@ -234,6 +234,7 @@ export default function PlayerSelector({
           <div className="flex items-center gap-2">
             <button
               aria-label="Search players"
+              title="Search players"
               onClick={() => {
                 setSearchMode(s => !s);
                 setSearchQuery('');
@@ -251,7 +252,10 @@ export default function PlayerSelector({
                 <path d="M21 21l-4.35-4.35"/>
               </svg>
             </button>
-            <button aria-label="Close player selector" onClick={onClose}
+            <button
+              aria-label="Close player selector"
+              title="Close"
+              onClick={onClose}
               className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
               style={{ border: '1px solid var(--color-border)' }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}

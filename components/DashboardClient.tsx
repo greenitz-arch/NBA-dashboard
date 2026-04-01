@@ -54,37 +54,46 @@ function sortPlayers(
 }
 
 // Scroll indicator — pulsing chevron, disappears when at bottom of page
-function ScrollArrow({ gridRef }: { gridRef: React.RefObject<HTMLDivElement | null> }) {
+function ScrollArrow({
+  gridRef,
+  playerCount,
+}: {
+  gridRef: React.RefObject<HTMLDivElement | null>;
+  playerCount: number;
+}) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    if (playerCount === 0) { setVisible(false); return; }
+
     const check = () => {
       const el = gridRef.current;
       if (!el) { setVisible(false); return; }
 
-      const rect = el.getBoundingClientRect();
-      // Only show if grid bottom is more than 100px below viewport
-      const overflows = rect.bottom > window.innerHeight + 100;
-      // Hide when within 80px of page bottom
-      const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 80;
+      // Use scrollHeight vs clientHeight to detect if page actually scrolls
+      const pageScrollable = document.body.scrollHeight > window.innerHeight + 50;
+      const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 60;
 
-      setVisible(overflows && !atBottom);
+      setVisible(pageScrollable && !atBottom);
     };
 
-    const t = setTimeout(check, 400);
+    // Wait for layout to settle after players render
+    const t1 = setTimeout(check, 100);
+    const t2 = setTimeout(check, 600);
     window.addEventListener('scroll', check, { passive: true });
     window.addEventListener('resize', check, { passive: true });
     return () => {
-      clearTimeout(t);
+      clearTimeout(t1);
+      clearTimeout(t2);
       window.removeEventListener('scroll', check);
       window.removeEventListener('resize', check);
     };
-  }, [gridRef]);
+  }, [gridRef, playerCount]);
 
   if (!visible) return null;
 
   return (
-    <div className="flex justify-center my-3" aria-hidden="true">
+    <div className="flex justify-center my-4" aria-hidden="true">
       <div
         className="animate-pulse-soft"
         style={{
@@ -271,7 +280,7 @@ export default function DashboardClient() {
                 </div>
               ))}
             </div>
-            <ScrollArrow gridRef={gridRef} />
+            <ScrollArrow gridRef={gridRef} playerCount={watchlist.length} />
           </>
         )}
 

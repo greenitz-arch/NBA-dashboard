@@ -66,7 +66,7 @@ export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStatePro
             Add players to track their latest game stats
           </p>
           <button
-            onClick={() => onOpenSelector('browse')}
+            onClick={() => onOpenSelector('conference')}
             aria-label="Add your first player"
             className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl font-display font-600 uppercase tracking-wider text-base transition-all duration-200 hover:scale-105"
             style={{ background: 'var(--neon-orange)', color: 'white', boxShadow: 'var(--glow-orange)' }}
