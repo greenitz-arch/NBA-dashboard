@@ -1,27 +1,17 @@
 // lib/nba.ts
-// Uses the unofficial stats.nba.com endpoints — free, no key required.
-// These are the same endpoints used by nba.com itself.
+// All data now comes from ESPN's public API — works from any server including Netlify.
+// stats.nba.com is completely removed (it blocks cloud IPs via Cloudflare).
 
-const NBA_BASE = 'https://stats.nba.com/stats';
-const CDN_BASE = 'https://cdn.nba.com';
-
-// stats.nba.com requires these headers or it returns 403
-const NBA_HEADERS: HeadersInit = {
-  'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Origin': 'https://www.nba.com',
-  'Referer': 'https://www.nba.com/',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'x-nba-stats-origin': 'stats',
-  'x-nba-stats-token': 'true',
-};
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+const ESPN_CDN  = 'https://a.espncdn.com';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Conference = 'East' | 'West';
 
 export interface Team {
-  id: number;
+  id: number;           // NBA.com-style team ID (used as stable key throughout app)
+  espnId: number;       // ESPN numeric team ID (used for ESPN API calls)
   abbreviation: string;
   city: string;
   conference: Conference;
@@ -31,7 +21,7 @@ export interface Team {
 }
 
 export interface Player {
-  id: number;
+  id: number;           // ESPN player ID
   first_name: string;
   last_name: string;
   position: string;
@@ -46,7 +36,7 @@ export interface GameStats {
   teamAbbr: string;
   gameId: string;
   gameDate: string;
-  matchup: string; // e.g. "LAL vs. GSW"
+  matchup: string;
   isHome: boolean;
   outcome: 'W' | 'L';
   minutes: string;
@@ -72,40 +62,42 @@ export interface GameStats {
 }
 
 // ─── Static team data ─────────────────────────────────────────────────────────
-// We keep this static since teams rarely change and it avoids an extra API call.
+// Both NBA.com IDs (used as stable keys) and ESPN IDs (used for API calls).
 
 export const NBA_TEAMS: Team[] = [
-  { id: 1610612737, abbreviation: 'ATL', city: 'Atlanta', conference: 'East', division: 'Southeast', full_name: 'Atlanta Hawks', name: 'Hawks' },
-  { id: 1610612738, abbreviation: 'BOS', city: 'Boston', conference: 'East', division: 'Atlantic', full_name: 'Boston Celtics', name: 'Celtics' },
-  { id: 1610612751, abbreviation: 'BKN', city: 'Brooklyn', conference: 'East', division: 'Atlantic', full_name: 'Brooklyn Nets', name: 'Nets' },
-  { id: 1610612766, abbreviation: 'CHA', city: 'Charlotte', conference: 'East', division: 'Southeast', full_name: 'Charlotte Hornets', name: 'Hornets' },
-  { id: 1610612741, abbreviation: 'CHI', city: 'Chicago', conference: 'East', division: 'Central', full_name: 'Chicago Bulls', name: 'Bulls' },
-  { id: 1610612739, abbreviation: 'CLE', city: 'Cleveland', conference: 'East', division: 'Central', full_name: 'Cleveland Cavaliers', name: 'Cavaliers' },
-  { id: 1610612742, abbreviation: 'DAL', city: 'Dallas', conference: 'West', division: 'Southwest', full_name: 'Dallas Mavericks', name: 'Mavericks' },
-  { id: 1610612743, abbreviation: 'DEN', city: 'Denver', conference: 'West', division: 'Northwest', full_name: 'Denver Nuggets', name: 'Nuggets' },
-  { id: 1610612765, abbreviation: 'DET', city: 'Detroit', conference: 'East', division: 'Central', full_name: 'Detroit Pistons', name: 'Pistons' },
-  { id: 1610612744, abbreviation: 'GSW', city: 'Golden State', conference: 'West', division: 'Pacific', full_name: 'Golden State Warriors', name: 'Warriors' },
-  { id: 1610612745, abbreviation: 'HOU', city: 'Houston', conference: 'West', division: 'Southwest', full_name: 'Houston Rockets', name: 'Rockets' },
-  { id: 1610612754, abbreviation: 'IND', city: 'Indiana', conference: 'East', division: 'Central', full_name: 'Indiana Pacers', name: 'Pacers' },
-  { id: 1610612746, abbreviation: 'LAC', city: 'LA', conference: 'West', division: 'Pacific', full_name: 'LA Clippers', name: 'Clippers' },
-  { id: 1610612747, abbreviation: 'LAL', city: 'Los Angeles', conference: 'West', division: 'Pacific', full_name: 'Los Angeles Lakers', name: 'Lakers' },
-  { id: 1610612763, abbreviation: 'MEM', city: 'Memphis', conference: 'West', division: 'Southwest', full_name: 'Memphis Grizzlies', name: 'Grizzlies' },
-  { id: 1610612748, abbreviation: 'MIA', city: 'Miami', conference: 'East', division: 'Southeast', full_name: 'Miami Heat', name: 'Heat' },
-  { id: 1610612749, abbreviation: 'MIL', city: 'Milwaukee', conference: 'East', division: 'Central', full_name: 'Milwaukee Bucks', name: 'Bucks' },
-  { id: 1610612750, abbreviation: 'MIN', city: 'Minnesota', conference: 'West', division: 'Northwest', full_name: 'Minnesota Timberwolves', name: 'Timberwolves' },
-  { id: 1610612740, abbreviation: 'NOP', city: 'New Orleans', conference: 'West', division: 'Southwest', full_name: 'New Orleans Pelicans', name: 'Pelicans' },
-  { id: 1610612752, abbreviation: 'NYK', city: 'New York', conference: 'East', division: 'Atlantic', full_name: 'New York Knicks', name: 'Knicks' },
-  { id: 1610612760, abbreviation: 'OKC', city: 'Oklahoma City', conference: 'West', division: 'Northwest', full_name: 'Oklahoma City Thunder', name: 'Thunder' },
-  { id: 1610612753, abbreviation: 'ORL', city: 'Orlando', conference: 'East', division: 'Southeast', full_name: 'Orlando Magic', name: 'Magic' },
-  { id: 1610612755, abbreviation: 'PHI', city: 'Philadelphia', conference: 'East', division: 'Atlantic', full_name: 'Philadelphia 76ers', name: '76ers' },
-  { id: 1610612756, abbreviation: 'PHX', city: 'Phoenix', conference: 'West', division: 'Pacific', full_name: 'Phoenix Suns', name: 'Suns' },
-  { id: 1610612757, abbreviation: 'POR', city: 'Portland', conference: 'West', division: 'Northwest', full_name: 'Portland Trail Blazers', name: 'Trail Blazers' },
-  { id: 1610612758, abbreviation: 'SAC', city: 'Sacramento', conference: 'West', division: 'Pacific', full_name: 'Sacramento Kings', name: 'Kings' },
-  { id: 1610612759, abbreviation: 'SAS', city: 'San Antonio', conference: 'West', division: 'Southwest', full_name: 'San Antonio Spurs', name: 'Spurs' },
-  { id: 1610612761, abbreviation: 'TOR', city: 'Toronto', conference: 'East', division: 'Atlantic', full_name: 'Toronto Raptors', name: 'Raptors' },
-  { id: 1610612762, abbreviation: 'UTA', city: 'Utah', conference: 'West', division: 'Northwest', full_name: 'Utah Jazz', name: 'Jazz' },
-  { id: 1610612764, abbreviation: 'WAS', city: 'Washington', conference: 'East', division: 'Southeast', full_name: 'Washington Wizards', name: 'Wizards' },
+  { id: 1610612737, espnId: 1,  abbreviation: 'ATL', city: 'Atlanta',       conference: 'East', division: 'Southeast', full_name: 'Atlanta Hawks',           name: 'Hawks' },
+  { id: 1610612738, espnId: 2,  abbreviation: 'BOS', city: 'Boston',        conference: 'East', division: 'Atlantic',  full_name: 'Boston Celtics',           name: 'Celtics' },
+  { id: 1610612751, espnId: 17, abbreviation: 'BKN', city: 'Brooklyn',      conference: 'East', division: 'Atlantic',  full_name: 'Brooklyn Nets',            name: 'Nets' },
+  { id: 1610612766, espnId: 30, abbreviation: 'CHA', city: 'Charlotte',     conference: 'East', division: 'Southeast', full_name: 'Charlotte Hornets',        name: 'Hornets' },
+  { id: 1610612741, espnId: 4,  abbreviation: 'CHI', city: 'Chicago',       conference: 'East', division: 'Central',   full_name: 'Chicago Bulls',            name: 'Bulls' },
+  { id: 1610612739, espnId: 5,  abbreviation: 'CLE', city: 'Cleveland',     conference: 'East', division: 'Central',   full_name: 'Cleveland Cavaliers',      name: 'Cavaliers' },
+  { id: 1610612742, espnId: 6,  abbreviation: 'DAL', city: 'Dallas',        conference: 'West', division: 'Southwest', full_name: 'Dallas Mavericks',         name: 'Mavericks' },
+  { id: 1610612743, espnId: 7,  abbreviation: 'DEN', city: 'Denver',        conference: 'West', division: 'Northwest', full_name: 'Denver Nuggets',           name: 'Nuggets' },
+  { id: 1610612765, espnId: 8,  abbreviation: 'DET', city: 'Detroit',       conference: 'East', division: 'Central',   full_name: 'Detroit Pistons',          name: 'Pistons' },
+  { id: 1610612744, espnId: 9,  abbreviation: 'GSW', city: 'Golden State',  conference: 'West', division: 'Pacific',   full_name: 'Golden State Warriors',    name: 'Warriors' },
+  { id: 1610612745, espnId: 10, abbreviation: 'HOU', city: 'Houston',       conference: 'West', division: 'Southwest', full_name: 'Houston Rockets',          name: 'Rockets' },
+  { id: 1610612754, espnId: 11, abbreviation: 'IND', city: 'Indiana',       conference: 'East', division: 'Central',   full_name: 'Indiana Pacers',           name: 'Pacers' },
+  { id: 1610612746, espnId: 12, abbreviation: 'LAC', city: 'LA',            conference: 'West', division: 'Pacific',   full_name: 'LA Clippers',              name: 'Clippers' },
+  { id: 1610612747, espnId: 13, abbreviation: 'LAL', city: 'Los Angeles',   conference: 'West', division: 'Pacific',   full_name: 'Los Angeles Lakers',       name: 'Lakers' },
+  { id: 1610612763, espnId: 29, abbreviation: 'MEM', city: 'Memphis',       conference: 'West', division: 'Southwest', full_name: 'Memphis Grizzlies',        name: 'Grizzlies' },
+  { id: 1610612748, espnId: 14, abbreviation: 'MIA', city: 'Miami',         conference: 'East', division: 'Southeast', full_name: 'Miami Heat',               name: 'Heat' },
+  { id: 1610612749, espnId: 15, abbreviation: 'MIL', city: 'Milwaukee',     conference: 'East', division: 'Central',   full_name: 'Milwaukee Bucks',          name: 'Bucks' },
+  { id: 1610612750, espnId: 16, abbreviation: 'MIN', city: 'Minnesota',     conference: 'West', division: 'Northwest', full_name: 'Minnesota Timberwolves',   name: 'Timberwolves' },
+  { id: 1610612740, espnId: 3,  abbreviation: 'NOP', city: 'New Orleans',   conference: 'West', division: 'Southwest', full_name: 'New Orleans Pelicans',     name: 'Pelicans' },
+  { id: 1610612752, espnId: 18, abbreviation: 'NYK', city: 'New York',      conference: 'East', division: 'Atlantic',  full_name: 'New York Knicks',          name: 'Knicks' },
+  { id: 1610612760, espnId: 25, abbreviation: 'OKC', city: 'Oklahoma City', conference: 'West', division: 'Northwest', full_name: 'Oklahoma City Thunder',    name: 'Thunder' },
+  { id: 1610612753, espnId: 19, abbreviation: 'ORL', city: 'Orlando',       conference: 'East', division: 'Southeast', full_name: 'Orlando Magic',            name: 'Magic' },
+  { id: 1610612755, espnId: 20, abbreviation: 'PHI', city: 'Philadelphia',  conference: 'East', division: 'Atlantic',  full_name: 'Philadelphia 76ers',       name: '76ers' },
+  { id: 1610612756, espnId: 21, abbreviation: 'PHX', city: 'Phoenix',       conference: 'West', division: 'Pacific',   full_name: 'Phoenix Suns',             name: 'Suns' },
+  { id: 1610612757, espnId: 22, abbreviation: 'POR', city: 'Portland',      conference: 'West', division: 'Northwest', full_name: 'Portland Trail Blazers',   name: 'Trail Blazers' },
+  { id: 1610612758, espnId: 23, abbreviation: 'SAC', city: 'Sacramento',    conference: 'West', division: 'Pacific',   full_name: 'Sacramento Kings',         name: 'Kings' },
+  { id: 1610612759, espnId: 24, abbreviation: 'SAS', city: 'San Antonio',   conference: 'West', division: 'Southwest', full_name: 'San Antonio Spurs',        name: 'Spurs' },
+  { id: 1610612761, espnId: 28, abbreviation: 'TOR', city: 'Toronto',       conference: 'East', division: 'Atlantic',  full_name: 'Toronto Raptors',          name: 'Raptors' },
+  { id: 1610612762, espnId: 26, abbreviation: 'UTA', city: 'Utah',          conference: 'West', division: 'Northwest', full_name: 'Utah Jazz',                name: 'Jazz' },
+  { id: 1610612764, espnId: 27, abbreviation: 'WAS', city: 'Washington',    conference: 'East', division: 'Southeast', full_name: 'Washington Wizards',       name: 'Wizards' },
 ];
+
+// ─── Team lookup helpers ──────────────────────────────────────────────────────
 
 export function getTeamsByConference(): Record<Conference, Team[]> {
   return {
@@ -118,188 +110,299 @@ export function getTeamById(id: number): Team | undefined {
   return NBA_TEAMS.find(t => t.id === id);
 }
 
+export function getTeamByEspnId(espnId: number): Team | undefined {
+  return NBA_TEAMS.find(t => t.espnId === espnId);
+}
+
 export function getTeamByAbbr(abbr: string): Team | undefined {
   return NBA_TEAMS.find(t => t.abbreviation === abbr);
 }
 
-// ─── API helpers ──────────────────────────────────────────────────────────────
+// ─── ESPN fetch helper ────────────────────────────────────────────────────────
 
-async function nbaFetch<T>(url: string): Promise<T> {
+async function espnFetch<T>(url: string): Promise<T> {
   const res = await fetch(url, {
-    headers: NBA_HEADERS,
-    next: { revalidate: 3600 },
+    headers: { 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(10000),
   });
-  if (!res.ok) throw new Error(`NBA Stats error ${res.status}: ${url}`);
+  if (!res.ok) throw new Error(`ESPN error ${res.status}: ${url}`);
   return res.json();
 }
 
-function getCurrentSeason(): string {
-  const now = new Date();
-  const year = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${year}-${String(year + 1).slice(2)}`;
-}
-
-// ─── Roster ───────────────────────────────────────────────────────────────────
-
-interface NbaRosterResponse {
-  resultSets: Array<{
-    name: string;
-    headers: string[];
-    rowSet: unknown[][];
-  }>;
-}
+// ─── Roster (used by /api/players route — kept for compatibility) ─────────────
 
 export async function getPlayersByTeam(teamId: number): Promise<Player[]> {
-  const season = getCurrentSeason();
-  const url = `${NBA_BASE}/commonteamroster?TeamID=${teamId}&Season=${season}`;
-  const data = await nbaFetch<NbaRosterResponse>(url);
-
-  const roster = data.resultSets.find(r => r.name === 'CommonTeamRoster');
-  if (!roster) return [];
-
-  const h = roster.headers;
   const team = getTeamById(teamId);
   if (!team) return [];
 
-  return roster.rowSet.map(row => {
-    const get = (key: string) => row[h.indexOf(key)];
-    const fullName = String(get('PLAYER') ?? '');
-    const parts = fullName.split(' ');
-    const firstName = parts[0] ?? '';
-    const lastName = parts.slice(1).join(' ') ?? '';
+  const data = await espnFetch<{
+    athletes?: Array<{
+      id: string;
+      displayName: string;
+      position?: { abbreviation: string };
+      jersey?: string;
+    }>;
+  }>(`${ESPN_BASE}/teams/${team.espnId}/roster`);
+
+  return (data.athletes ?? []).map(a => {
+    const parts = a.displayName.split(' ');
     return {
-      id: Number(get('PLAYER_ID')),
-      first_name: firstName,
-      last_name: lastName,
-      position: String(get('POSITION') ?? ''),
-      jersey_number: String(get('NUM') ?? ''),
+      id: Number(a.id),
+      first_name: parts[0] ?? '',
+      last_name: parts.slice(1).join(' ') ?? '',
+      position: a.position?.abbreviation ?? '',
+      jersey_number: a.jersey ?? '',
       team,
     };
   }).sort((a, b) => a.last_name.localeCompare(b.last_name));
 }
 
-// ─── Player search ────────────────────────────────────────────────────────────
-
-interface NbaPlayerSearchResponse {
-  resultSets: Array<{
-    name: string;
-    headers: string[];
-    rowSet: unknown[][];
-  }>;
-}
+// ─── Player search (used by /api/players route — kept for compatibility) ──────
 
 export async function searchPlayers(query: string): Promise<Player[]> {
   if (query.length < 2) return [];
-  const season = getCurrentSeason();
-  const url = `${NBA_BASE}/commonallplayers?LeagueID=00&Season=${season}&IsOnlyCurrentSeason=1`;
-  const data = await nbaFetch<NbaPlayerSearchResponse>(url);
-
-  const set = data.resultSets[0];
-  if (!set) return [];
-
-  const h = set.headers;
   const q = query.toLowerCase();
 
-  return set.rowSet
-    .filter(row => {
-      const name = String(row[h.indexOf('DISPLAY_FIRST_LAST')] ?? '').toLowerCase();
-      return name.includes(q);
-    })
-    .slice(0, 20)
-    .map(row => {
-      const get = (key: string) => row[h.indexOf(key)];
-      const fullName = String(get('DISPLAY_FIRST_LAST') ?? '');
-      const parts = fullName.split(' ');
-      const teamId = Number(get('TEAM_ID'));
-      const team = getTeamById(teamId) ?? {
-        id: teamId,
-        abbreviation: String(get('TEAM_ABBREVIATION') ?? ''),
-        city: '',
-        conference: 'East' as Conference,
-        division: '',
-        full_name: String(get('TEAM_NAME') ?? ''),
-        name: String(get('TEAM_NAME') ?? ''),
-      };
-      return {
-        id: Number(get('PERSON_ID')),
-        first_name: parts[0] ?? '',
-        last_name: parts.slice(1).join(' ') ?? '',
-        position: '',
-        jersey_number: '',
-        team,
-      };
-    });
+  // Fetch all rosters in parallel and filter client-side
+  // This is fast because results are cached for 1h in the proxy
+  const results = await Promise.allSettled(
+    NBA_TEAMS.map(team =>
+      espnFetch<{
+        athletes?: Array<{
+          id: string;
+          displayName: string;
+          position?: { abbreviation: string };
+          jersey?: string;
+        }>;
+      }>(`${ESPN_BASE}/teams/${team.espnId}/roster`)
+        .then(data => (data.athletes ?? [])
+          .filter(a => a.displayName.toLowerCase().includes(q))
+          .map(a => {
+            const parts = a.displayName.split(' ');
+            return {
+              id: Number(a.id),
+              first_name: parts[0] ?? '',
+              last_name: parts.slice(1).join(' ') ?? '',
+              position: a.position?.abbreviation ?? '',
+              jersey_number: a.jersey ?? '',
+              team,
+            };
+          })
+        )
+        .catch(() => [] as Player[])
+    )
+  );
+
+  return results
+    .flatMap(r => r.status === 'fulfilled' ? r.value : [])
+    .slice(0, 25);
 }
 
-// ─── Game log / stats ─────────────────────────────────────────────────────────
+// ─── Game stats via ESPN scoreboard + summary ─────────────────────────────────
+// Flow: scoreboard (get recent game IDs for a team) → summary (get boxscore)
 
-interface NbaGameLogResponse {
-  resultSets: Array<{
-    name: string;
-    headers: string[];
-    rowSet: unknown[][];
+interface EspnScoreboard {
+  events?: Array<{
+    id: string;
+    date: string;
+    competitions?: Array<{
+      competitors?: Array<{
+        id: string;         // ESPN team ID
+        homeAway: string;
+        winner?: boolean;
+        score?: string;
+        team?: { abbreviation?: string };
+      }>;
+    }>;
   }>;
+}
+
+interface EspnSummary {
+  boxscore?: {
+    players?: Array<{
+      team?: { id?: string };
+      statistics?: Array<{
+        labels?: string[];
+        athletes?: Array<{
+          athlete?: { id?: string; displayName?: string };
+          stats?: string[];
+          didNotPlay?: boolean;
+        }>;
+      }>;
+    }>;
+  };
+  header?: {
+    competitions?: Array<{
+      date?: string;
+      competitors?: Array<{
+        id?: string;
+        homeAway?: string;
+        winner?: boolean;
+        score?: string;
+        team?: { abbreviation?: string };
+      }>;
+    }>;
+  };
+}
+
+// Search back up to this many days for a player's last game
+const MAX_DAYS_BACK = 7;
+
+function formatDateParam(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
+async function findRecentGameId(espnTeamId: number): Promise<{ gameId: string; date: string } | null> {
+  // Walk back day by day to find the team's most recent completed game
+  for (let daysBack = 0; daysBack <= MAX_DAYS_BACK; daysBack++) {
+    const date = new Date();
+    date.setDate(date.getDate() - daysBack);
+    const dateParam = formatDateParam(date);
+
+    try {
+      const data = await espnFetch<EspnScoreboard>(
+        `${ESPN_BASE}/scoreboard?dates=${dateParam}`
+      );
+
+      const event = (data.events ?? []).find(e =>
+        e.competitions?.[0]?.competitors?.some(
+          c => c.id === String(espnTeamId)
+        )
+      );
+
+      if (event) {
+        return { gameId: event.id, date: event.date };
+      }
+    } catch {
+      // continue to next day
+    }
+  }
+  return null;
+}
+
+function parseMadeAtt(labels: string[], stats: string[], key: string): [number, number] {
+  const idx = labels.indexOf(key);
+  if (idx === -1 || !stats[idx]) return [0, 0];
+  const val = stats[idx];
+  if (val.includes('-')) {
+    const [made, att] = val.split('-').map(Number);
+    return [made || 0, att || 0];
+  }
+  return [Number(val) || 0, 0];
 }
 
 export async function getLastGameStats(playerId: number): Promise<GameStats | null> {
   try {
-    const season = getCurrentSeason();
-    const url = `${NBA_BASE}/playergamelog?PlayerID=${playerId}&Season=${season}&SeasonType=Regular+Season`;
-    const data = await nbaFetch<NbaGameLogResponse>(url);
+    // Find which team this player is on by checking the watchlist's stored team
+    // We look up the game by fetching the ESPN athlete gamelog endpoint
+    const gamelogData = await espnFetch<{
+      events?: Record<string, {
+        id: string;
+        gameDate?: string;
+        atVs?: string;
+        opponent?: { abbreviation?: string };
+        homeTeamScore?: string;
+        awayTeamScore?: string;
+        gameResult?: string;
+        team?: { id?: string };
+      }>;
+    }>(`https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog`);
 
-    const log = data.resultSets.find(r => r.name === 'PlayerGameLog');
-    if (!log || log.rowSet.length === 0) return null;
+    if (!gamelogData.events) return null;
 
-    // First row is most recent game
-    const row = log.rowSet[0];
-    const h = log.headers;
-    const get = (key: string) => row[h.indexOf(key)];
+    const eventIds = Object.keys(gamelogData.events);
+    if (eventIds.length === 0) return null;
 
-    const matchup = String(get('MATCHUP') ?? '');
-    const isHome = matchup.includes('vs.');
-    const opponentAbbr = matchup.split(/vs\.|@/).pop()?.trim() ?? '';
-    const outcome = String(get('WL') ?? 'L') as 'W' | 'L';
+    // V8 sorts numeric-like object keys ascending, so we sort descending
+    // to get the most recent game ID (largest number = most recent) first
+    const sortedIds = eventIds.sort((a, b) => Number(b) - Number(a));
+    const recentEvent = gamelogData.events[sortedIds[0]];
+    if (!recentEvent) return null;
 
-    const pts = Number(get('PTS') ?? 0);
-    const reb = Number(get('REB') ?? 0);
-    const ast = Number(get('AST') ?? 0);
-    const teamId = Number(get('Team_ID') ?? 0);
-    const team = getTeamById(teamId);
+    const gameId = recentEvent.id ?? sortedIds[0];
+    const gameDate = recentEvent.gameDate ?? '';
+    const opponentAbbr = recentEvent.opponent?.abbreviation ?? '';
+    const outcome = (recentEvent.gameResult ?? 'L') as 'W' | 'L';
+    const isHome = (recentEvent.atVs ?? '').toLowerCase() === 'vs';
 
-    // Parse score from MATCHUP or use plus_minus approximation
-    const plusMinus = Number(get('PLUS_MINUS') ?? 0);
+    // Now fetch the full game summary to get player stats
+    const summary = await espnFetch<EspnSummary>(
+      `${ESPN_BASE}/summary?event=${gameId}`
+    );
 
-    return {
-      playerId,
-      playerName: '',
-      teamId,
-      teamAbbr: team?.abbreviation ?? '',
-      gameId: String(get('Game_ID') ?? ''),
-      gameDate: String(get('GAME_DATE') ?? ''),
-      matchup,
-      isHome,
-      outcome,
-      minutes: String(get('MIN') ?? '0'),
-      pts,
-      reb,
-      ast,
-      stl: Number(get('STL') ?? 0),
-      blk: Number(get('BLK') ?? 0),
-      turnover: Number(get('TOV') ?? 0),
-      fgm: Number(get('FGM') ?? 0),
-      fga: Number(get('FGA') ?? 0),
-      fg_pct: Number(get('FG_PCT') ?? 0),
-      fg3m: Number(get('FG3M') ?? 0),
-      fg3a: Number(get('FG3A') ?? 0),
-      fg3_pct: Number(get('FG3_PCT') ?? 0),
-      ftm: Number(get('FTM') ?? 0),
-      fta: Number(get('FTA') ?? 0),
-      ft_pct: Number(get('FT_PCT') ?? 0),
-      plus_minus: plusMinus,
-      opponentAbbr,
-      teamScore: 0,
-      opponentScore: 0,
-    };
+    const boxscore = summary.boxscore;
+    if (!boxscore?.players) return null;
+
+    // Find this player's stat row across both team groups
+    for (const group of boxscore.players) {
+      const statCat = group.statistics?.[0];
+      if (!statCat) continue;
+
+      const labels = statCat.labels ?? [];
+      const athleteRow = statCat.athletes?.find(
+        a => String(a.athlete?.id) === String(playerId)
+      );
+
+      if (!athleteRow || athleteRow.didNotPlay) continue;
+
+      const stats = athleteRow.stats ?? [];
+
+      // Find which competitor matches this team for score/home
+      const competitors = summary.header?.competitions?.[0]?.competitors ?? [];
+      const espnTeamId = group.team?.id ?? '';
+      const myComp = competitors.find(c => String(c.id) === String(espnTeamId));
+      const oppComp = competitors.find(c => String(c.id) !== String(espnTeamId));
+
+      const teamScore = Number(myComp?.score ?? 0);
+      const opponentScore = Number(oppComp?.score ?? 0);
+      const isHomeFromHeader = myComp?.homeAway === 'home';
+
+      // Parse FG/3PT/FT as made-attempted
+      const [fgm, fga]   = parseMadeAtt(labels, stats, 'FG');
+      const [fg3m, fg3a] = parseMadeAtt(labels, stats, '3PT');
+      const [ftm, fta]   = parseMadeAtt(labels, stats, 'FT');
+      const fg_pct  = fga  > 0 ? Math.round((fgm / fga)   * 1000) / 1000 : 0;
+      const fg3_pct = fg3a > 0 ? Math.round((fg3m / fg3a)  * 1000) / 1000 : 0;
+      const ft_pct  = fta  > 0 ? Math.round((ftm / fta)    * 1000) / 1000 : 0;
+
+      // Find team by ESPN ID
+      const team = getTeamByEspnId(Number(espnTeamId));
+
+      const plusMinusIdx = labels.indexOf('+/-');
+      const plusMinusRaw = plusMinusIdx >= 0 ? stats[plusMinusIdx] ?? '0' : '0';
+      const plusMinus = Number(plusMinusRaw.replace('+', '')) || 0;
+
+      return {
+        playerId,
+        playerName: athleteRow.athlete?.displayName ?? '',
+        teamId: team?.id ?? 0,
+        teamAbbr: team?.abbreviation ?? myComp?.team?.abbreviation ?? '',
+        gameId,
+        gameDate,
+        matchup: isHome ? `vs ${opponentAbbr}` : `@ ${opponentAbbr}`,
+        isHome: isHomeFromHeader,
+        outcome,
+        minutes: stats[labels.indexOf('MIN')] ?? '0',
+        pts: Number(stats[labels.indexOf('PTS')] ?? 0),
+        reb: Number(stats[labels.indexOf('REB')] ?? 0),
+        ast: Number(stats[labels.indexOf('AST')] ?? 0),
+        stl: Number(stats[labels.indexOf('STL')] ?? 0),
+        blk: Number(stats[labels.indexOf('BLK')] ?? 0),
+        turnover: Number(stats[labels.indexOf('TO')] ?? 0),
+        fgm, fga, fg_pct,
+        fg3m, fg3a, fg3_pct,
+        ftm, fta, ft_pct,
+        plus_minus: plusMinus,
+        opponentAbbr,
+        teamScore,
+        opponentScore,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -307,12 +410,9 @@ export async function getLastGameStats(playerId: number): Promise<GameStats | nu
 
 export async function getBatchLastGameStats(playerIds: number[]): Promise<Map<number, GameStats>> {
   const results = new Map<number, GameStats>();
-  // Fetch in parallel with a concurrency limit of 5
-  const chunks: number[][] = [];
+  // Fetch in parallel chunks of 5 to avoid overwhelming the ESPN API
   for (let i = 0; i < playerIds.length; i += 5) {
-    chunks.push(playerIds.slice(i, i + 5));
-  }
-  for (const chunk of chunks) {
+    const chunk = playerIds.slice(i, i + 5);
     await Promise.all(
       chunk.map(async id => {
         const stats = await getLastGameStats(id);
@@ -325,10 +425,11 @@ export async function getBatchLastGameStats(playerIds: number[]): Promise<Map<nu
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
 
+// Fix #3 — use ESPN CDN, not NBA.com CDN (player IDs are now ESPN IDs)
 export function getPlayerHeadshotUrl(playerId: number): string {
-  return `${CDN_BASE}/headshots/nba/latest/1040x760/${playerId}.png`;
+  return `${ESPN_CDN}/i/headshots/nba/players/full/${playerId}.png`;
 }
 
 export function getTeamLogoUrl(teamAbbr: string): string {
-  return `${CDN_BASE}/logos/nba/${teamAbbr}/global/L/logo.svg`;
+  return `${ESPN_CDN}/i/teamlogos/nba/500/${teamAbbr.toLowerCase()}.png`;
 }

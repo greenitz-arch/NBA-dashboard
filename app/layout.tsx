@@ -47,10 +47,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           (function() {
             try {
               var saved = localStorage.getItem('courtside_theme') || 'dark';
-              var resolved = saved === 'system'
-                ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-                : saved;
-              document.documentElement.setAttribute('data-theme', resolved === 'skin' ? 'dark' : resolved);
+              var resolved;
+              if (saved === 'system') {
+                resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+              } else if (saved === 'skin') {
+                resolved = 'dark';
+              } else {
+                resolved = saved;
+              }
+              document.documentElement.setAttribute('data-theme', resolved);
             } catch(e) {}
           })();
         `}} />

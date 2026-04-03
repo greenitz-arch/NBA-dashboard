@@ -75,6 +75,7 @@ async function fetchSearch(query: string): Promise<Player[]> {
       const teamId = Number(get('TEAM_ID'));
       const team = NBA_TEAMS.find(t => t.id === teamId) ?? {
         id: teamId,
+        espnId: 0,
         abbreviation: String(get('TEAM_ABBREVIATION') ?? ''),
         city: '',
         conference: 'East' as Conference,

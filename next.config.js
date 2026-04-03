@@ -12,7 +12,6 @@ const nextConfig = {
         hostname: 'ak-static.cms.nba.com',
         pathname: '/**',
       },
-      // ESPN player headshot images (used when pulling data via ESPN API)
       {
         protocol: 'https',
         hostname: 'a.espncdn.com',

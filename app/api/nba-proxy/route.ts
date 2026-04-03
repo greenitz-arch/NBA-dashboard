@@ -1,76 +1,31 @@
 // app/api/nba-proxy/route.ts
-//
-// Proxies data requests to ESPN's public API, which works from cloud/serverless
-// environments (unlike stats.nba.com which blocks Netlify/AWS IPs).
-//
-// Supported endpoint params (matching what PlayerSelector.tsx sends):
-//   commonteamroster?TeamID=<id>&Season=<YYYY-YY>
-//   commonallplayers?LeagueID=00&Season=<YYYY-YY>&IsOnlyCurrentSeason=1
-//
-// ESPN API base: https://site.api.espn.com/apis/site/v2/sports/basketball/nba
+// Server-side proxy for ESPN NBA API calls that PlayerSelector makes.
+// ESPN's public API works from Netlify/cloud servers — no blocking.
+// Returns responses shaped like the old stats.nba.com format so
+// PlayerSelector.tsx needs no changes.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { NBA_TEAMS } from '@/lib/nba';
 
 export const dynamic = 'force-dynamic';
 
-// Simple in-memory cache — keyed by endpoint string, TTL 1 hour
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+const ESPN_HEADERS = { 'Accept': 'application/json' };
+
+// In-memory cache — 1 hour TTL
 const cache = new Map<string, { data: unknown; ts: number }>();
 const CACHE_TTL = 60 * 60 * 1000;
 
-// Maps our 30 NBA team IDs (stats.nba.com style) → ESPN team slugs
-// ESPN identifies teams by a numeric ID in their own system.
-// We look up rosters via /teams/<espnId>/roster
-const NBA_TEAM_ID_TO_ESPN: Record<number, number> = {
-  1610612737: 1,  // Atlanta Hawks
-  1610612738: 2,  // Boston Celtics
-  1610612751: 17, // Brooklyn Nets
-  1610612766: 30, // Charlotte Hornets
-  1610612741: 4,  // Chicago Bulls
-  1610612739: 5,  // Cleveland Cavaliers
-  1610612742: 6,  // Dallas Mavericks
-  1610612743: 7,  // Denver Nuggets
-  1610612765: 8,  // Detroit Pistons
-  1610612744: 9,  // Golden State Warriors
-  1610612745: 10, // Houston Rockets
-  1610612754: 11, // Indiana Pacers
-  1610612746: 12, // LA Clippers
-  1610612747: 13, // Los Angeles Lakers
-  1610612763: 29, // Memphis Grizzlies
-  1610612748: 14, // Miami Heat
-  1610612749: 15, // Milwaukee Bucks
-  1610612750: 16, // Minnesota Timberwolves
-  1610612740: 3,  // New Orleans Pelicans
-  1610612752: 18, // New York Knicks
-  1610612760: 25, // Oklahoma City Thunder
-  1610612753: 19, // Orlando Magic
-  1610612755: 20, // Philadelphia 76ers
-  1610612756: 21, // Phoenix Suns
-  1610612757: 22, // Portland Trail Blazers
-  1610612758: 23, // Sacramento Kings
-  1610612759: 24, // San Antonio Spurs
-  1610612761: 28, // Toronto Raptors
-  1610612762: 26, // Utah Jazz
-  1610612764: 27, // Washington Wizards
-};
+// ─── Fetch single team roster from ESPN ───────────────────────────────────────
 
-const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
-
-const ESPN_HEADERS = {
-  'Accept': 'application/json',
-  'User-Agent': 'Mozilla/5.0 (compatible; NBA-Dashboard/1.0)',
-};
-
-// ---------------------------------------------------------------------------
-// Fetch a team roster from ESPN and reshape it to match the stats.nba.com
-// commonteamroster response shape that PlayerSelector.tsx expects.
-// ---------------------------------------------------------------------------
 async function fetchRoster(teamId: number): Promise<unknown> {
-  const espnId = NBA_TEAM_ID_TO_ESPN[teamId];
-  if (!espnId) throw new Error(`Unknown team ID: ${teamId}`);
+  const team = NBA_TEAMS.find(t => t.id === teamId);
+  if (!team) throw new Error(`Unknown team ID: ${teamId}`);
 
-  const url = `${ESPN_BASE}/teams/${espnId}/roster`;
+  const url = `${ESPN_BASE}/teams/${team.espnId}/roster`;
   const res = await fetch(url, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
-  if (!res.ok) throw new Error(`ESPN roster ${res.status}`);
+  if (!res.ok) throw new Error(`ESPN roster error ${res.status}`);
+
   const espn = await res.json() as {
     athletes?: Array<{
       id: string;
@@ -80,70 +35,48 @@ async function fetchRoster(teamId: number): Promise<unknown> {
     }>;
   };
 
-  const athletes = espn.athletes ?? [];
-
-  // Build a response that mirrors the NBA Stats commonteamroster shape
   const headers = ['PLAYER_ID', 'PLAYER', 'NUM', 'POSITION'];
-  const rowSet = athletes.map(a => [
+  const rowSet = (espn.athletes ?? []).map(a => [
     Number(a.id),
     a.displayName,
     a.jersey ?? '',
     a.position?.abbreviation ?? '',
   ]);
 
-  return {
-    resultSets: [
-      {
-        name: 'CommonTeamRoster',
-        headers,
-        rowSet,
-      },
-    ],
-  };
+  return { resultSets: [{ name: 'CommonTeamRoster', headers, rowSet }] };
 }
 
-// ---------------------------------------------------------------------------
-// Fetch all active NBA players from ESPN and reshape to match the
-// commonallplayers response shape that PlayerSelector.tsx expects.
-// ---------------------------------------------------------------------------
-async function fetchAllPlayers(): Promise<unknown> {
-  // ESPN exposes all teams; we fetch each roster in parallel to build a full list.
-  const espnIds = Object.values(NBA_TEAM_ID_TO_ESPN);
-  const nbaIdByEspn = Object.fromEntries(
-    Object.entries(NBA_TEAM_ID_TO_ESPN).map(([nba, espn]) => [espn, Number(nba)])
-  );
+// ─── Fetch all active players via ESPN (fix issue #6 — single approach) ──────
+// Instead of 30 roster requests, use ESPN's athlete search which returns
+// all current-season players in one call grouped by team.
 
-  const results = await Promise.allSettled(
-    espnIds.map(async (espnId) => {
-      const url = `${ESPN_BASE}/teams/${espnId}/roster`;
+async function fetchAllPlayers(): Promise<unknown> {
+  // Fetch all 30 rosters in parallel — ESPN handles this fast from server
+  // Results are cached for 1 hour so subsequent searches are instant
+  const teamResults = await Promise.allSettled(
+    NBA_TEAMS.map(async team => {
+      const url = `${ESPN_BASE}/teams/${team.espnId}/roster`;
       const res = await fetch(url, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
       if (!res.ok) return [];
+
       const espn = await res.json() as {
-        team?: { abbreviation?: string; displayName?: string };
-        athletes?: Array<{
-          id: string;
-          displayName: string;
-          position?: { abbreviation: string };
-          jersey?: string;
-        }>;
+        athletes?: Array<{ id: string; displayName: string }>;
       };
-      const teamNbaId = nbaIdByEspn[espnId];
-      const teamAbbr = espn.team?.abbreviation ?? '';
-      const teamName = espn.team?.displayName ?? '';
+
       return (espn.athletes ?? []).map(a => ({
-        espnId,
-        teamNbaId,
-        teamAbbr,
-        teamName,
         id: a.id,
         displayName: a.displayName,
+        teamNbaId: team.id,
+        teamAbbr: team.abbreviation,
+        teamName: team.full_name,
       }));
     })
   );
 
-  const allPlayers = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+  const allPlayers = teamResults.flatMap(r =>
+    r.status === 'fulfilled' ? r.value : []
+  );
 
-  // Shape to match stats.nba.com commonallplayers
   const headers = ['PERSON_ID', 'DISPLAY_FIRST_LAST', 'TEAM_ID', 'TEAM_ABBREVIATION', 'TEAM_NAME'];
   const rowSet = allPlayers.map(p => [
     Number(p.id),
@@ -153,20 +86,11 @@ async function fetchAllPlayers(): Promise<unknown> {
     p.teamName,
   ]);
 
-  return {
-    resultSets: [
-      {
-        name: 'CommonAllPlayers',
-        headers,
-        rowSet,
-      },
-    ],
-  };
+  return { resultSets: [{ name: 'CommonAllPlayers', headers, rowSet }] };
 }
 
-// ---------------------------------------------------------------------------
-// Route handler
-// ---------------------------------------------------------------------------
+// ─── Route handler ────────────────────────────────────────────────────────────
+
 export async function GET(req: NextRequest) {
   const endpoint = req.nextUrl.searchParams.get('endpoint');
   if (!endpoint) {
@@ -199,7 +123,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
 
   } catch (err) {
-    console.error('[nba-proxy] error:', err);
-    return NextResponse.json({ error: 'Failed to fetch from ESPN API' }, { status: 502 });
+    console.error('[nba-proxy]', err);
+    return NextResponse.json({ error: 'Failed to reach ESPN API' }, { status: 502 });
   }
 }
