@@ -316,9 +316,15 @@ export async function getLastGameStats(playerId: number): Promise<GameStats | nu
     const eventIds = Object.keys(gamelogData.events);
     if (eventIds.length === 0) return null;
 
-    // V8 sorts numeric-like object keys ascending, so we sort descending
-    // to get the most recent game ID (largest number = most recent) first
-    const sortedIds = eventIds.sort((a, b) => Number(b) - Number(a));
+    // Sort by gameDate descending — do NOT sort by ID.
+    // Preseason game IDs are numerically higher than regular season IDs,
+    // so sorting by ID would surface October preseason games over recent ones.
+    const sortedIds = eventIds.sort((a, b) => {
+      const dateA = new Date(gamelogData.events![a]?.gameDate ?? '').getTime();
+      const dateB = new Date(gamelogData.events![b]?.gameDate ?? '').getTime();
+      return dateB - dateA; // most recent first
+    });
+
     const recentEvent = gamelogData.events[sortedIds[0]];
     if (!recentEvent) return null;
 
