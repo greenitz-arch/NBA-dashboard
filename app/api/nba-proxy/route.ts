@@ -12,9 +12,13 @@ export const dynamic = 'force-dynamic';
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
 const ESPN_HEADERS = { 'Accept': 'application/json' };
 
-// In-memory cache — 1 hour TTL
-const cache = new Map<string, { data: unknown; ts: number }>();
-const CACHE_TTL = 60 * 60 * 1000;
+// Caching is now handled by Netlify's edge (s-maxage header on the response),
+// not by an in-memory Map. A module-level Map is unreliable on serverless:
+// it only resets on cold start, so under steady traffic a "1 hour" TTL could
+// silently persist far longer, and different warm instances could each hold
+// their own stale snapshot. The edge cache below has one predictable TTL
+// enforced by Netlify's CDN regardless of function instance lifecycle.
+const CACHE_CONTROL = 's-maxage=3600, stale-while-revalidate=60';
 
 // ─── Fetch single team roster from ESPN ───────────────────────────────────────
 
@@ -23,7 +27,11 @@ async function fetchRoster(teamId: number): Promise<unknown> {
   if (!team) throw new Error(`Unknown team ID: ${teamId}`);
 
   const url = `${ESPN_BASE}/teams/${team.espnId}/roster`;
-  const res = await fetch(url, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
+  const res = await fetch(url, {
+    headers: ESPN_HEADERS,
+    signal: AbortSignal.timeout(10000),
+    cache: 'no-store',
+  });
   if (!res.ok) throw new Error(`ESPN roster error ${res.status}`);
 
   const espn = await res.json() as {
@@ -52,11 +60,15 @@ async function fetchRoster(teamId: number): Promise<unknown> {
 
 async function fetchAllPlayers(): Promise<unknown> {
   // Fetch all 30 rosters in parallel — ESPN handles this fast from server
-  // Results are cached for 1 hour so subsequent searches are instant
+  // The response as a whole is edge-cached for 1 hour (see CACHE_CONTROL below)
   const teamResults = await Promise.allSettled(
     NBA_TEAMS.map(async team => {
       const url = `${ESPN_BASE}/teams/${team.espnId}/roster`;
-      const res = await fetch(url, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
+      const res = await fetch(url, {
+        headers: ESPN_HEADERS,
+        signal: AbortSignal.timeout(10000),
+        cache: 'no-store',
+      });
       if (!res.ok) return [];
 
       const espn = await res.json() as {
@@ -97,12 +109,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'endpoint param required' }, { status: 400 });
   }
 
-  // Serve from cache if fresh
-  const cached = cache.get(endpoint);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
-    return NextResponse.json(cached.data);
-  }
-
   try {
     let data: unknown;
 
@@ -119,8 +125,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `Unsupported endpoint: ${endpoint}` }, { status: 400 });
     }
 
-    cache.set(endpoint, { data, ts: Date.now() });
-    return NextResponse.json(data);
+    // Netlify's edge caches this for 1hr (s-maxage) and serves a stale copy
+    // for up to 60s while refetching in the background (stale-while-revalidate).
+    // This gives the same "fast repeat requests" benefit the old in-memory
+    // Map was after, but with one enforced TTL instead of per-instance state.
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': CACHE_CONTROL },
+    });
 
   } catch (err) {
     console.error('[nba-proxy]', err);
