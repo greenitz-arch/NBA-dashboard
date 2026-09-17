@@ -125,12 +125,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `Unsupported endpoint: ${endpoint}` }, { status: 400 });
     }
 
-    // Netlify's edge caches this for 1hr (s-maxage) and serves a stale copy
-    // for up to 60s while refetching in the background (stale-while-revalidate).
-    // This gives the same "fast repeat requests" benefit the old in-memory
-    // Map was after, but with one enforced TTL instead of per-instance state.
+    // Only tell Netlify's edge to cache this if it's actually good data.
+    // If ESPN hiccuped and we got an empty result back, we don't want that
+    // empty response saved and repeated to every visitor for the next hour —
+    // that's exactly what happened last deploy. So: no rows, no caching.
+    const hasData = Array.isArray((data as any)?.resultSets?.[0]?.rowSet)
+      && (data as any).resultSets[0].rowSet.length > 0;
+
     return NextResponse.json(data, {
-      headers: { 'Cache-Control': CACHE_CONTROL },
+      headers: { 'Cache-Control': hasData ? CACHE_CONTROL : 'no-store' },
     });
 
   } catch (err) {
