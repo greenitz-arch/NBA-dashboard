@@ -7,41 +7,73 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { NBA_TEAMS } from '@/lib/nba';
 
-export const dynamic = 'force-dynamic';
-
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
 const ESPN_HEADERS = { 'Accept': 'application/json' };
 
-// Caching is now handled by Netlify's edge (s-maxage header on the response),
-// not by an in-memory Map. A module-level Map is unreliable on serverless:
-// it only resets on cold start, so under steady traffic a "1 hour" TTL could
-// silently persist far longer, and different warm instances could each hold
-// their own stale snapshot. The edge cache below has one predictable TTL
-// enforced by Netlify's CDN regardless of function instance lifecycle.
-const CACHE_CONTROL = 's-maxage=3600, stale-while-revalidate=60';
+// Roster data is refreshed at most every 12 hours. This uses Next.js's own
+// fetch cache (next: { revalidate }) instead of a module-level Map or a
+// manual Cache-Control header on our response:
+// - A module-level Map only resets on cold start, so a "1 hour" TTL could
+//   silently persist for months under steady traffic (the original bug).
+// - A manual Cache-Control/s-maxage header relies on Netlify's CDN, which is
+//   spread across many edge locations that don't share or reliably clear
+//   each other's copies — one location can keep serving a stale/broken
+//   response indefinitely (what broke browse-by-team and search).
+// Next's fetch cache is a single shared, durable store (not per-instance,
+// not per-edge-node): every request reads the same entry, and once it's
+// older than REVALIDATE_SECONDS the next request triggers a background
+// refetch from ESPN automatically — no separate scheduled job needed.
+// IMPORTANT: this only works because there is no `export const dynamic =
+// 'force-dynamic'` on this route — that setting disables fetch caching
+// entirely, which is why the old code had to manage caching by hand.
+const REVALIDATE_SECONDS = 60 * 60 * 12; // 12 hours
 
 // ─── Fetch single team roster from ESPN ───────────────────────────────────────
+
+type EspnRosterResponse = {
+  athletes?: Array<{
+    id: string;
+    displayName: string;
+    position?: { abbreviation: string };
+    jersey?: string;
+  }>;
+};
+
+async function fetchEspnRoster(url: string): Promise<EspnRosterResponse> {
+  const res = await fetch(url, {
+    headers: ESPN_HEADERS,
+    signal: AbortSignal.timeout(10000),
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`ESPN roster error ${res.status}`);
+  const data = await res.json() as EspnRosterResponse;
+
+  // If the cached/fresh result came back with no players, ESPN likely
+  // hiccuped when this entry was last refreshed. Rather than showing an
+  // empty roster for up to 12 hours, bypass the cache once and get a truly
+  // live answer for this request. (The cached entry itself will self-heal
+  // on the next scheduled revalidation if ESPN is healthy by then.)
+  if (!data.athletes || data.athletes.length === 0) {
+    const liveRes = await fetch(url, {
+      headers: ESPN_HEADERS,
+      signal: AbortSignal.timeout(10000),
+      cache: 'no-store',
+    });
+    if (liveRes.ok) {
+      const liveData = await liveRes.json() as EspnRosterResponse;
+      if (liveData.athletes && liveData.athletes.length > 0) return liveData;
+    }
+  }
+
+  return data;
+}
 
 async function fetchRoster(teamId: number): Promise<unknown> {
   const team = NBA_TEAMS.find(t => t.id === teamId);
   if (!team) throw new Error(`Unknown team ID: ${teamId}`);
 
   const url = `${ESPN_BASE}/teams/${team.espnId}/roster`;
-  const res = await fetch(url, {
-    headers: ESPN_HEADERS,
-    signal: AbortSignal.timeout(10000),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`ESPN roster error ${res.status}`);
-
-  const espn = await res.json() as {
-    athletes?: Array<{
-      id: string;
-      displayName: string;
-      position?: { abbreviation: string };
-      jersey?: string;
-    }>;
-  };
+  const espn = await fetchEspnRoster(url);
 
   const headers = ['PLAYER_ID', 'PLAYER', 'NUM', 'POSITION'];
   const rowSet = (espn.athletes ?? []).map(a => [
@@ -59,21 +91,12 @@ async function fetchRoster(teamId: number): Promise<unknown> {
 // all current-season players in one call grouped by team.
 
 async function fetchAllPlayers(): Promise<unknown> {
-  // Fetch all 30 rosters in parallel — ESPN handles this fast from server
-  // The response as a whole is edge-cached for 1 hour (see CACHE_CONTROL below)
+  // Fetch all 30 rosters in parallel. Each one is backed by the 12-hour
+  // fetch cache above, so this is fast except right after a cache refresh.
   const teamResults = await Promise.allSettled(
     NBA_TEAMS.map(async team => {
       const url = `${ESPN_BASE}/teams/${team.espnId}/roster`;
-      const res = await fetch(url, {
-        headers: ESPN_HEADERS,
-        signal: AbortSignal.timeout(10000),
-        cache: 'no-store',
-      });
-      if (!res.ok) return [];
-
-      const espn = await res.json() as {
-        athletes?: Array<{ id: string; displayName: string }>;
-      };
+      const espn = await fetchEspnRoster(url);
 
       return (espn.athletes ?? []).map(a => ({
         id: a.id,
@@ -125,15 +148,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `Unsupported endpoint: ${endpoint}` }, { status: 400 });
     }
 
-    // Only tell Netlify's edge to cache this if it's actually good data.
-    // If ESPN hiccuped and we got an empty result back, we don't want that
-    // empty response saved and repeated to every visitor for the next hour —
-    // that's exactly what happened last deploy. So: no rows, no caching.
-    const hasData = Array.isArray((data as any)?.resultSets?.[0]?.rowSet)
-      && (data as any).resultSets[0].rowSet.length > 0;
-
+    // No manual caching headers needed here anymore — freshness is handled
+    // where the ESPN calls happen (see fetchEspnRoster above). This route
+    // itself should always run fresh so it can pick up that cached data.
     return NextResponse.json(data, {
-      headers: { 'Cache-Control': hasData ? CACHE_CONTROL : 'no-store' },
+      headers: { 'Cache-Control': 'no-store' },
     });
 
   } catch (err) {
