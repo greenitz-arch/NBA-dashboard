@@ -40,9 +40,18 @@ type EspnRosterResponse = {
 };
 
 async function fetchEspnRoster(url: string): Promise<EspnRosterResponse> {
+  // NOTE: deliberately no `signal` here. Next.js's time-based revalidation
+  // (next.revalidate below) reuses this exact fetch's options for its
+  // automatic background refresh — including any AbortSignal. A
+  // signal from AbortSignal.timeout() starts counting down the moment it's
+  // created and stays aborted forever after it fires once, so by the time
+  // the background refresh runs (hours later), that reused signal is
+  // already expired and the refresh fails immediately, every time. This is
+  // a known Next.js caveat, not something specific to this ESPN endpoint —
+  // any cached fetch with a timeout signal will hit the same failure. The
+  // uncached fallback fetch below is unaffected since it's never revalidated.
   const res = await fetch(url, {
     headers: ESPN_HEADERS,
-    signal: AbortSignal.timeout(10000),
     next: { revalidate: REVALIDATE_SECONDS },
   });
   if (!res.ok) throw new Error(`ESPN roster error ${res.status}`);
