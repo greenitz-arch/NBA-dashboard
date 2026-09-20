@@ -18,80 +18,68 @@ interface PlayerSelectorProps {
 // search flow: search input → results
 type View = 'conference' | 'conf-teams' | 'players' | 'all-teams';
 
-function getCurrentSeason(): string {
-  const now = new Date();
-  const year = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${year}-${String(year + 1).slice(2)}`;
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+
+type EspnAthlete = {
+  id: string;
+  displayName: string;
+  position?: { abbreviation: string };
+  jersey?: string;
+};
+
+// Netlify's server IP range is blocked by ESPN (same situation as
+// stats.nba.com), but ESPN allows direct requests from a visitor's own
+// browser. So these calls run client-side instead of through a server
+// proxy — each visitor fetches with their own, unblocked connection.
+// A simple per-visit cache avoids re-fetching the same team repeatedly
+// while browsing (it resets naturally on page reload).
+const rosterCache = new Map<number, EspnAthlete[]>();
+
+async function fetchEspnRoster(espnId: number): Promise<EspnAthlete[]> {
+  const cached = rosterCache.get(espnId);
+  if (cached) return cached;
+  const res = await fetch(`${ESPN_BASE}/teams/${espnId}/roster`);
+  if (!res.ok) throw new Error(`ESPN roster error ${res.status}`);
+  const data = await res.json() as { athletes?: EspnAthlete[] };
+  const athletes = data.athletes ?? [];
+  rosterCache.set(espnId, athletes);
+  return athletes;
 }
 
-async function nbaProxyFetch(endpoint: string): Promise<unknown> {
-  const params = new URLSearchParams({ endpoint });
-  const res = await fetch(`/api/nba-proxy?${params.toString()}`);
-  if (!res.ok) throw new Error(`Proxy error ${res.status}`);
-  return res.json();
+function toPlayer(a: EspnAthlete, team: Team): Player {
+  const parts = a.displayName.split(' ');
+  return {
+    id: Number(a.id),
+    first_name: parts[0] ?? '',
+    last_name: parts.slice(1).join(' ') ?? '',
+    position: a.position?.abbreviation ?? '',
+    jersey_number: a.jersey ?? '',
+    team,
+  };
 }
 
 async function fetchRoster(teamId: number): Promise<Player[]> {
-  const season = getCurrentSeason();
-  const data = await nbaProxyFetch(`commonteamroster?TeamID=${teamId}&Season=${season}`) as {
-    resultSets: Array<{ name: string; headers: string[]; rowSet: unknown[][] }>;
-  };
-  const roster = data.resultSets?.find(r => r.name === 'CommonTeamRoster');
-  if (!roster) return [];
-  const h = roster.headers;
   const team = NBA_TEAMS.find(t => t.id === teamId);
   if (!team) return [];
-  return roster.rowSet.map((row: unknown[]) => {
-    const get = (key: string) => row[h.indexOf(key)];
-    const fullName = String(get('PLAYER') ?? '');
-    const parts = fullName.split(' ');
-    return {
-      id: Number(get('PLAYER_ID')),
-      first_name: parts[0] ?? '',
-      last_name: parts.slice(1).join(' ') ?? '',
-      position: String(get('POSITION') ?? ''),
-      jersey_number: String(get('NUM') ?? ''),
-      team,
-    };
-  }).sort((a: Player, b: Player) => a.last_name.localeCompare(b.last_name));
+  const athletes = await fetchEspnRoster(team.espnId);
+  return athletes.map(a => toPlayer(a, team))
+    .sort((a, b) => a.last_name.localeCompare(b.last_name));
 }
 
 async function fetchSearch(query: string): Promise<Player[]> {
-  const season = getCurrentSeason();
-  const data = await nbaProxyFetch(`commonallplayers?LeagueID=00&Season=${season}&IsOnlyCurrentSeason=1`) as {
-    resultSets: Array<{ name: string; headers: string[]; rowSet: unknown[][] }>;
-  };
-  const set = data.resultSets?.[0];
-  if (!set) return [];
-  const h = set.headers;
   const q = query.toLowerCase();
-  return set.rowSet
-    .filter((row: unknown[]) => String(row[h.indexOf('DISPLAY_FIRST_LAST')] ?? '').toLowerCase().includes(q))
-    .slice(0, 25)
-    .map((row: unknown[]) => {
-      const get = (key: string) => row[h.indexOf(key)];
-      const fullName = String(get('DISPLAY_FIRST_LAST') ?? '');
-      const parts = fullName.split(' ');
-      const teamId = Number(get('TEAM_ID'));
-      const team = NBA_TEAMS.find(t => t.id === teamId) ?? {
-        id: teamId,
-        espnId: 0,
-        abbreviation: String(get('TEAM_ABBREVIATION') ?? ''),
-        city: '',
-        conference: 'East' as Conference,
-        division: '',
-        full_name: String(get('TEAM_NAME') ?? ''),
-        name: String(get('TEAM_NAME') ?? ''),
-      };
-      return {
-        id: Number(get('PERSON_ID')),
-        first_name: parts[0] ?? '',
-        last_name: parts.slice(1).join(' ') ?? '',
-        position: '',
-        jersey_number: '',
-        team,
-      };
-    });
+  const perTeam = await Promise.allSettled(
+    NBA_TEAMS.map(async team => {
+      const athletes = await fetchEspnRoster(team.espnId);
+      return athletes
+        .filter(a => a.displayName.toLowerCase().includes(q))
+        .map(a => toPlayer(a, team));
+    })
+  );
+  return perTeam
+    .filter((r): r is PromiseFulfilledResult<Player[]> => r.status === 'fulfilled')
+    .flatMap(r => r.value)
+    .slice(0, 25);
 }
 
 const ALL_TEAMS_SORTED = [...NBA_TEAMS].sort((a, b) => a.full_name.localeCompare(b.full_name));
