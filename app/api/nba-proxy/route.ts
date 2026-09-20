@@ -166,6 +166,14 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error('[nba-proxy]', err);
-    return NextResponse.json({ error: 'Failed to reach ESPN API' }, { status: 502 });
+    // TEMPORARY: exposing the real error so we can see it in the browser's
+    // Network tab, since server-side logs haven't been reachable. Revert
+    // this to the generic message once the underlying issue is fixed.
+    const message = err instanceof Error ? err.message : String(err);
+    const name = err instanceof Error ? err.name : typeof err;
+    return NextResponse.json(
+      { error: 'Failed to reach ESPN API', debugName: name, debugMessage: message },
+      { status: 502 }
+    );
   }
 }
