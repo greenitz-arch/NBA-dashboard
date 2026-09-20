@@ -8,7 +8,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { NBA_TEAMS } from '@/lib/nba';
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
-const ESPN_HEADERS = { 'Accept': 'application/json' };
+// ESPN's public API started returning 403s for requests without an
+// identifying User-Agent. A generic browser-style UA doesn't help either —
+// what works is a header that honestly names the app and links back to it,
+// same as any well-behaved API client.
+const ESPN_HEADERS = {
+  'Accept': 'application/json',
+  'User-Agent': 'CourtsideNBA/1.0 (+https://courtsidenba.netlify.app/)',
+};
 
 // Roster data is refreshed at most every 12 hours. This uses Next.js's own
 // fetch cache (next: { revalidate }) instead of a module-level Map or a
@@ -166,14 +173,6 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error('[nba-proxy]', err);
-    // TEMPORARY: exposing the real error so we can see it in the browser's
-    // Network tab, since server-side logs haven't been reachable. Revert
-    // this to the generic message once the underlying issue is fixed.
-    const message = err instanceof Error ? err.message : String(err);
-    const name = err instanceof Error ? err.name : typeof err;
-    return NextResponse.json(
-      { error: 'Failed to reach ESPN API', debugName: name, debugMessage: message },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: 'Failed to reach ESPN API' }, { status: 502 });
   }
 }

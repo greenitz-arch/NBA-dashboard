@@ -122,8 +122,12 @@ export function getTeamByAbbr(abbr: string): Team | undefined {
 
 async function espnFetch<T>(url: string): Promise<T> {
   const res = await fetch(url, {
-    headers: { 'Accept': 'application/json' },
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'CourtsideNBA/1.0 (+https://courtsidenba.netlify.app/)',
+    },
     signal: AbortSignal.timeout(10000),
+    cache: 'no-store',
   });
   if (!res.ok) throw new Error(`ESPN error ${res.status}: ${url}`);
   return res.json();
