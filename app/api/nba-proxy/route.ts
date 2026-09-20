@@ -173,6 +173,15 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error('[nba-proxy]', err);
-    return NextResponse.json({ error: 'Failed to reach ESPN API' }, { status: 502 });
+    // Keeping this exposed (not just logged) until the ESPN 403 issue is
+    // fully resolved, so every test tells us something without needing
+    // another deploy just to see the error. Revert to the generic message
+    // once this is confirmed fixed.
+    const message = err instanceof Error ? err.message : String(err);
+    const name = err instanceof Error ? err.name : typeof err;
+    return NextResponse.json(
+      { error: 'Failed to reach ESPN API', debugName: name, debugMessage: message },
+      { status: 502 }
+    );
   }
 }
