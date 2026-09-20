@@ -124,7 +124,6 @@ async function espnFetch<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Accept': 'application/json' },
     signal: AbortSignal.timeout(10000),
-    cache: 'no-store',
   });
   if (!res.ok) throw new Error(`ESPN error ${res.status}: ${url}`);
   return res.json();
