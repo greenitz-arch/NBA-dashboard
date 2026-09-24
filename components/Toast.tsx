@@ -4,9 +4,11 @@ interface ToastProps {
   title: string;
   subtitle: string;
   onClose: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
-export default function Toast({ title, subtitle, onClose }: ToastProps) {
+export default function Toast({ title, subtitle, onClose, actionLabel, onAction }: ToastProps) {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
@@ -46,17 +48,33 @@ export default function Toast({ title, subtitle, onClose }: ToastProps) {
           {subtitle}
         </p>
 
-        <button
-          onClick={onClose}
-          className="w-full py-2.5 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
-          style={{
-            background: 'var(--neon-orange)',
-            color: 'white',
-            boxShadow: 'var(--glow-orange)',
-          }}
-        >
-          OK
-        </button>
+        <div className="flex gap-3">
+          {actionLabel && onAction && (
+            <button
+              onClick={onAction}
+              className="flex-1 py-2.5 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
+              style={{
+                background: 'var(--neon-orange)',
+                color: 'white',
+                boxShadow: 'var(--glow-orange)',
+              }}
+            >
+              {actionLabel}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
+            style={{
+              background: actionLabel && onAction ? 'transparent' : 'var(--neon-orange)',
+              border: actionLabel && onAction ? '1px solid var(--color-border)' : 'none',
+              color: actionLabel && onAction ? 'var(--color-text-primary)' : 'white',
+              boxShadow: actionLabel && onAction ? 'none' : 'var(--glow-orange)',
+            }}
+          >
+            OK
+          </button>
+        </div>
       </div>
     </div>
   );

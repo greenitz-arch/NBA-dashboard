@@ -3,11 +3,14 @@
 @tailwind utilities;
 
 /* ─── Fonts ─────────────────────────────────────────────────────────────── */
+/* NOTE: --font-display / --font-body / --font-mono are supplied by next/font
+   via the className applied to <html> in layout.tsx (see displayFont.variable
+   etc). Do NOT redeclare them here — an earlier version of this file did,
+   using generic names like 'Barlow Condensed', and that redeclaration was
+   silently winning the cascade over the real self-hosted font, causing the
+   whole site to fall back to plain system sans-serif instead of the actual
+   condensed/bold display font. */
 :root {
-  --font-display: 'Barlow Condensed', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
-  --font-mono: 'DM Mono', monospace;
-
   /* Accent colors — same in all themes */
   --neon-orange: #ff6b2b;
   --neon-blue:   #00d4ff;
@@ -17,6 +20,15 @@
   --glow-orange: 0 0 24px rgba(255, 107, 43, 0.35);
   --glow-blue:   0 0 24px rgba(0, 212, 255, 0.3);
   --glow-green:  0 0 20px rgba(0, 255, 136, 0.3);
+
+  /* Team Skin accent — defaults collapse to plain orange (identical to the
+     app before this feature existed) whenever no skin is active. Real team
+     colors are applied at runtime by ThemeProvider via inline CSS vars. */
+  --skin-primary:      var(--neon-orange);
+  --skin-primary-rgb:  255, 107, 43;
+  --skin-secondary:    var(--neon-orange);
+  --skin-secondary-rgb: 255, 107, 43;
+  --skin-glow:         var(--glow-orange);
 }
 
 /* ─── Dark theme (default) ───────────────────────────────────────────────── */
@@ -27,7 +39,7 @@
   --color-border:        #1e1e2a;
   --color-muted:         #2a2a38;
   --color-text-primary:  #ffffff;
-  --color-text-secondary:#6b6b8a;
+  --color-text-secondary:#9494b8;
   --color-text-tertiary: #3d3d55;
   --color-overlay:       rgba(0, 0, 0, 0.7);
   --color-hover:         rgba(255, 255, 255, 0.04);
@@ -45,11 +57,11 @@
   --color-scrollbar-track: #111118;
   --color-scrollbar-thumb: #2a2a38;
   --color-court-line:    rgba(255, 255, 255, 0.015);
-  --color-court-glow:    rgba(255, 107, 43, 0.04);
+  --color-court-glow:    rgba(var(--skin-primary-rgb), 0.14);
   --color-sidenav-bg:    #0d0d14;
   --color-progress-bg:   rgba(255, 255, 255, 0.08);
   --color-divider:       rgba(255, 255, 255, 0.08);
-  --color-divider-text:  #3d3d55;
+  --color-divider-text:  #6b6b8a;
   --color-input-bg:      #16161f;
   --color-watched-bg:    rgba(0, 255, 136, 0.04);
 }
@@ -80,7 +92,7 @@
   --color-scrollbar-track: #f0f0ec;
   --color-scrollbar-thumb: #c8c8d4;
   --color-court-line:    rgba(0, 0, 0, 0.04);
-  --color-court-glow:    rgba(255, 107, 43, 0.06);
+  --color-court-glow:    rgba(var(--skin-primary-rgb), 0.16);
   --color-sidenav-bg:    #ffffff;
   --color-progress-bg:   rgba(0, 0, 0, 0.08);
   --color-divider:       rgba(0, 0, 0, 0.08);
@@ -130,9 +142,9 @@ body {
 
 /* ─── Stat pills ─────────────────────────────────────────────────────────── */
 .stat-hero {
-  background: linear-gradient(135deg, rgba(255,107,43,0.2), rgba(255,107,43,0.08));
-  border: 1px solid rgba(255,107,43,0.4);
-  color: var(--neon-orange);
+  background: linear-gradient(135deg, rgba(var(--skin-primary-rgb),0.2), rgba(var(--skin-primary-rgb),0.08));
+  border: 1px solid rgba(var(--skin-primary-rgb),0.4);
+  color: var(--skin-primary);
 }
 .stat-highlight {
   background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.05));
@@ -152,11 +164,129 @@ body {
 
 /* ─── Court lines background ─────────────────────────────────────────────── */
 .court-lines {
+  position: relative;
+  /* Confines the blend modes below (mix-blend-mode, background-blend-mode) to
+     only ever blend with content painted inside this element. Without this,
+     a blend mode can reach through to whatever the browser considers the
+     page's backdrop, which is how the hardwood tint was leaking onto fixed
+     overlays like the settings menu instead of staying behind the dashboard
+     content. */
+  isolation: isolate;
   background-image:
     radial-gradient(ellipse at 50% 100%, var(--color-court-glow) 0%, transparent 70%),
     linear-gradient(var(--color-court-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--color-court-line) 1px, transparent 1px);
   background-size: 100% 100%, 60px 60px, 60px 60px;
+}
+
+/* Hardwood texture — only rendered once a Team Skin is active (main gets the
+   .skin-active class from page.tsx). ::before adds a procedural wood-grain
+   noise (via the #woodNoise filter defined once in layout.tsx); ::after adds
+   plank seams tinted toward the team's colors via background-blend-mode. */
+.court-lines.skin-active {
+  overflow: hidden;
+}
+.court-lines.skin-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  filter: url(#woodNoise);
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: -1;
+}
+.court-lines.skin-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255,255,255,0.025) 0px,
+      rgba(255,255,255,0.025) 2px,
+      transparent 2px,
+      transparent 86px,
+      rgba(0,0,0,0.15) 86px,
+      rgba(0,0,0,0.15) 88px
+    ),
+    linear-gradient(160deg, rgba(var(--skin-primary-rgb), 0.4) 0%, rgba(var(--skin-secondary-rgb), 0.4) 100%);
+  background-blend-mode: normal, color;
+  background-size: 100% 88px, 100% 100%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ─── Skin backdrop accents (crest + jersey-style lettering) ────────────── */
+.skin-crest {
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 460px;
+  height: 460px;
+  opacity: 0.1;
+  pointer-events: none;
+  z-index: -1;
+}
+.skin-crest svg { width: 100%; height: 100%; }
+.skin-jersey-mark {
+  position: absolute;
+  top: 10px;
+  right: -20px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  font-size: 220px;
+  line-height: 1;
+  letter-spacing: -6px;
+  color: transparent;
+  -webkit-text-stroke: 2px rgba(var(--skin-secondary-rgb), 0.18);
+  background: linear-gradient(135deg, rgba(var(--skin-primary-rgb), 0.14), rgba(var(--skin-secondary-rgb), 0.05));
+  -webkit-background-clip: text;
+  background-clip: text;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-4deg);
+  white-space: nowrap;
+  z-index: -1;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+/* ─── Skin switch transition sweep ──────────────────────────────────────── */
+.skin-sweep {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+  overflow: hidden;
+}
+.skin-sweep-band {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: -40vw;
+  width: 40vw;
+  background: linear-gradient(90deg, transparent, var(--skin-primary) 45%, var(--skin-secondary) 55%, transparent);
+  transform: skewX(-12deg);
+  filter: blur(2px);
+  opacity: 0;
+}
+.skin-sweep.active .skin-sweep-band {
+  animation: sweepPass 0.65s ease forwards;
+}
+@keyframes sweepPass {
+  0%   { opacity: 0; transform: skewX(-12deg) translateX(0); }
+  10%  { opacity: 0.9; }
+  100% { opacity: 0; transform: skewX(-12deg) translateX(180vw); }
+}
+
+/* ─── Player card hover glow (skin-aware) ───────────────────────────────── */
+.card-hover-glow {
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.card-hover-glow:hover {
+  box-shadow: 0 8px 28px rgba(var(--skin-primary-rgb), 0.25);
 }
 
 /* ─── Animations ─────────────────────────────────────────────────────────── */

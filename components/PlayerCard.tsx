@@ -78,7 +78,7 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
 
   return (
     <div
-      className="group relative rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02]"
+      className="group relative card-hover-glow rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02]"
       style={{
         background: 'var(--color-card)',
         border: '1px solid var(--color-border)',
@@ -109,7 +109,7 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
         style={{ background: 'var(--color-photo-bg)' }}
       >
         <div className="noise-overlay" />
-        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'var(--neon-orange)', opacity: 0.5 }} />
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'var(--skin-primary)', opacity: 0.5 }} />
         <span
           className="absolute top-2 left-2 font-display font-800 uppercase select-none pointer-events-none leading-none"
           style={{ color: 'var(--color-watermark)', fontSize: '4rem' }}
@@ -147,7 +147,7 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
             style={{ color: 'var(--color-text-primary)' }}
           >
             {player.first_name}{' '}
-            <span style={{ color: 'var(--neon-orange)' }}>{player.last_name}</span>
+            <span style={{ color: 'var(--skin-primary)' }}>{player.last_name}</span>
           </h3>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)' }}>

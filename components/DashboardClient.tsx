@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useWatchlist, MAX_ROSTER, type WatchlistPlayer } from '@/lib/useWatchlist';
+import { MAX_ROSTER, type UseTeamsReturn } from '@/lib/useTeams';
+import type { WatchlistPlayer } from '@/lib/useWatchlist';
 import { usePreferences } from '@/lib/usePreferences';
 import type { GameStats, Player } from '@/lib/nba';
 import PlayerCard from './PlayerCard';
 import PlayerSelector from './PlayerSelector';
 import EmptyState from './EmptyState';
 import Toast from './Toast';
+import TeamSwitcher from './TeamSwitcher';
+import ConfirmDialog from './ConfirmDialog';
 
 const POLL_INTERVAL = 10 * 60 * 1000;
 
@@ -97,8 +100,8 @@ function ScrollArrow({
       <div
         className="animate-pulse-soft"
         style={{
-          color: 'var(--neon-orange)',
-          filter: 'drop-shadow(0 0 8px rgba(255,107,43,0.5))',
+          color: 'var(--skin-primary)',
+          filter: 'drop-shadow(0 0 8px rgba(var(--skin-primary-rgb),0.5))',
         }}
       >
         <svg viewBox="0 0 24 24" width="32" height="32" fill="none"
@@ -110,14 +113,19 @@ function ScrollArrow({
   );
 }
 
-export default function DashboardClient() {
-  const { watchlist, addPlayer, removePlayer, isWatching, isFull, hydrated } = useWatchlist();
+interface DashboardClientProps {
+  teamsApi: UseTeamsReturn;
+}
+
+export default function DashboardClient({ teamsApi }: DashboardClientProps) {
+  const { teams, activeTeam, watchlist, addPlayer, removePlayer, isWatching, isFull, switchTeam, createTeam, renameTeam, deleteTeam, hydrated } = teamsApi;
   const { prefs } = usePreferences();
   const [stats, setStats] = useState<Record<number, GameStats>>({});
   const [loadingStats, setLoadingStats] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorMode, setSelectorMode] = useState<'conference' | 'all-teams' | 'search'>('conference');
   const [showToast, setShowToast] = useState(false);
+  const [showTeamFullSuggestion, setShowTeamFullSuggestion] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -173,12 +181,25 @@ export default function DashboardClient() {
   }, [isFull]);
 
   const handleAddPlayer = useCallback((player: Player) => {
+    const wasOneBelowCap = watchlist.length === MAX_ROSTER - 1;
     const result = addPlayer(player);
     if (result === 'full') setShowToast(true);
-  }, [addPlayer]);
+    else if (result === 'added' && wasOneBelowCap) setShowTeamFullSuggestion(true);
+  }, [addPlayer, watchlist]);
 
   const sortedWatchlist = sortPlayers(watchlist, stats, prefs.sortBy);
+  const hasTeams = teams.length > 0;
   const hasPlayers = watchlist.length > 0;
+
+  const handleCreateTeamFromToast = useCallback(() => {
+    createTeam();
+    setShowToast(false);
+  }, [createTeam]);
+
+  const handleCreateTeamFromSuggestion = useCallback(() => {
+    createTeam();
+    setShowTeamFullSuggestion(false);
+  }, [createTeam]);
 
   if (!hydrated) {
     return (
@@ -198,41 +219,65 @@ export default function DashboardClient() {
       <section className="max-w-[1100px] mx-auto px-6 pt-8 pb-4">
 
         {/* Hero */}
-        <div className={`mb-4 ${hasPlayers ? 'text-center' : ''}`}>
-          {hasPlayers ? (
-            <>
-              <h1
-                className="font-display font-800 text-3xl uppercase tracking-wide leading-tight"
-                style={{ color: 'var(--color-text-primary)' }}
-              >
-                Welcome to your courtside seats
-              </h1>
-              <p
-                className="font-body mt-3 leading-snug"
-                style={{ color: 'var(--color-text-secondary)', fontSize: '1.05rem' }}
-              >
-                Ready to expand your roster?<br />
-                You can track up to 15 players.
-              </p>
-              <button
-                onClick={() => handleOpenSelector('conference')}
-                aria-label="Add more players to your roster"
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
-                style={{ background: 'var(--neon-orange)', color: 'white', boxShadow: 'var(--glow-orange)' }}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
-                  stroke="white" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                Add Players
-              </button>
-            </>
+        <div className={`mb-4 ${hasTeams ? 'text-center' : ''}`}>
+          {hasTeams ? (
+            hasPlayers ? (
+              <>
+                <h1
+                  className="font-display font-800 text-3xl uppercase tracking-wide leading-tight"
+                  style={{ color: 'var(--color-text-primary)' }}
+                >
+                  Welcome to your courtside seats
+                </h1>
+                <p
+                  className="font-body mt-3 leading-snug"
+                  style={{ color: 'var(--color-text-secondary)', fontSize: '1.05rem' }}
+                >
+                  Ready to expand your roster?<br />
+                  You can track up to 15 players per team.
+                </p>
+                <button
+                  onClick={() => handleOpenSelector('conference')}
+                  aria-label="Add more players to your roster"
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
+                  style={{ background: 'var(--skin-primary)', color: 'white', boxShadow: 'var(--skin-glow)' }}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                    stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  Add Players
+                </button>
+              </>
+            ) : (
+              <>
+                <p
+                  className="font-body leading-snug"
+                  style={{ color: 'var(--color-text-secondary)', fontSize: '1.05rem' }}
+                >
+                  This team is empty.<br />
+                  Add up to 15 players to start tracking their stats.
+                </p>
+                <button
+                  onClick={() => handleOpenSelector('conference')}
+                  aria-label="Add players to this team"
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
+                  style={{ background: 'var(--skin-primary)', color: 'white', boxShadow: 'var(--skin-glow)' }}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                    stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  Add Players
+                </button>
+              </>
+            )
           ) : (
             <h1
               className="font-display font-800 uppercase tracking-tight leading-none"
               style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', color: 'var(--color-text-primary)' }}
             >
-              Your <span style={{ color: 'var(--neon-orange)' }}>Roster</span>
+              Your <span style={{ color: 'var(--skin-primary)' }}>Roster</span>
             </h1>
           )}
         </div>
@@ -246,7 +291,9 @@ export default function DashboardClient() {
                 className="h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${(watchlist.length / MAX_ROSTER) * 100}%`,
-                  background: watchlist.length >= MAX_ROSTER ? 'var(--neon-red)' : 'var(--neon-orange)',
+                  background: watchlist.length >= MAX_ROSTER
+                    ? 'var(--neon-red)'
+                    : 'linear-gradient(90deg, var(--skin-primary), var(--skin-secondary))',
                 }}
               />
             </div>
@@ -259,6 +306,18 @@ export default function DashboardClient() {
                 : `${watchlist.length} / ${MAX_ROSTER} players`}
             </span>
           </div>
+        )}
+
+        {/* Team title + switcher — only once a team exists (created on first player add) */}
+        {hasTeams && activeTeam && (
+          <TeamSwitcher
+            teams={teams}
+            activeTeam={activeTeam}
+            onSwitch={switchTeam}
+            onCreate={createTeam}
+            onRename={renameTeam}
+            onDelete={deleteTeam}
+          />
         )}
 
         {/* Player grid */}
@@ -304,9 +363,22 @@ export default function DashboardClient() {
 
       {showToast && (
         <Toast
-          title="Your roster is full"
-          subtitle="You can only track up to 15 players."
+          title="This team is full"
+          subtitle="Each team tracks up to 15 players. Start a new team to keep building your collection."
           onClose={() => setShowToast(false)}
+          actionLabel="New Team"
+          onAction={handleCreateTeamFromToast}
+        />
+      )}
+
+      {showTeamFullSuggestion && (
+        <ConfirmDialog
+          title="Want to track more players?"
+          body="Add another team using the dropdown menu."
+          primaryLabel="Add a team"
+          secondaryLabel="Got it"
+          onPrimary={handleCreateTeamFromSuggestion}
+          onSecondary={() => setShowTeamFullSuggestion(false)}
         />
       )}
     </>

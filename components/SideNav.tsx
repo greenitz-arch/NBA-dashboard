@@ -1,19 +1,25 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTheme, type ThemeMode } from './ThemeProvider';
 import { usePreferences, type SortOption } from '@/lib/usePreferences';
+import type { UseTeamsReturn } from '@/lib/useTeams';
+import { MAX_ROSTER } from '@/lib/useTeams';
+import { NBA_TEAMS } from '@/lib/teams';
+import EditTeamNameModal from './EditTeamNameModal';
+import ConfirmDialog from './ConfirmDialog';
 
 interface SideNavProps {
   open: boolean;
   onClose: () => void;
+  teamsApi: UseTeamsReturn;
 }
 
 const DISPLAY_OPTIONS: { value: ThemeMode | 'skin'; label: string; disabled?: boolean }[] = [
   { value: 'dark',   label: 'Dark mode' },
   { value: 'light',  label: 'Light mode' },
   { value: 'system', label: 'System preference' },
-  { value: 'skin',   label: 'Team Skin', disabled: true },
+  { value: 'skin',   label: 'Team Skin' },
 ];
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -24,9 +30,12 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'by-position', label: 'By position (C first)' },
 ];
 
-export default function SideNav({ open, onClose }: SideNavProps) {
-  const { mode, setMode } = useTheme();
+export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
+  const { mode, setMode, activeSkin, setSkinTeam } = useTheme();
   const { prefs, updatePref } = usePreferences();
+  const { teams, activeTeam, switchTeam, createTeam, renameTeam, deleteTeam } = teamsApi;
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
 
   // Keyboard shortcut [ to toggle
   useEffect(() => {
@@ -151,6 +160,46 @@ export default function SideNav({ open, onClose }: SideNavProps) {
                 );
               })}
             </div>
+
+            {mode === 'skin' && (
+              <div
+                className="mt-2 ml-1 p-3 rounded-xl"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}
+              >
+                <p
+                  className="font-mono text-[9px] uppercase tracking-[1.5px] mb-2"
+                  style={{ color: 'var(--color-text-tertiary)' }}
+                >
+                  Pick your team
+                </p>
+                <div className="grid grid-cols-8 gap-1.5">
+                  {NBA_TEAMS.map(team => {
+                    const isActive = activeSkin?.abbr === team.abbr;
+                    return (
+                      <button
+                        key={team.abbr}
+                        onClick={() => setSkinTeam(team.abbr)}
+                        title={team.name}
+                        aria-label={`Use ${team.name} skin`}
+                        className="w-full aspect-square rounded-full flex items-center justify-center transition-transform hover:scale-110"
+                        style={{
+                          background: `linear-gradient(135deg, ${team.primary} 55%, ${team.secondary} 55%)`,
+                          border: isActive ? '2px solid white' : '2px solid transparent',
+                          boxShadow: isActive ? '0 0 0 2px rgba(255,255,255,0.15)' : 'none',
+                        }}
+                      >
+                        <span
+                          className="font-display font-700 text-white"
+                          style={{ fontSize: '6px', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
+                        >
+                          {team.abbr.slice(0, 2)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Divider */}
@@ -197,6 +246,104 @@ export default function SideNav({ open, onClose }: SideNavProps) {
               })}
             </div>
           </section>
+
+          {teams.length > 0 && (
+            <>
+              {/* Divider */}
+              <div style={{ borderTop: '1px solid var(--color-border)' }} />
+
+              {/* TEAMS section */}
+              <section>
+                <p
+                  className="font-mono text-[10px] uppercase tracking-[3px] mb-3"
+                  style={{ color: 'var(--color-text-tertiary)' }}
+                >
+                  Teams
+                </p>
+                <div className="space-y-1">
+                  {teams.map(team => {
+                    const isSelected = activeTeam?.id === team.id;
+                    return (
+                      <div
+                        key={team.id}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors"
+                        style={{ background: isSelected ? 'rgba(255,107,43,0.1)' : 'transparent' }}
+                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'; }}
+                        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                      >
+                        <button
+                          onClick={() => switchTeam(team.id)}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        >
+                          <div
+                            className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
+                            style={{ border: `2px solid ${isSelected ? 'var(--neon-orange)' : 'var(--color-border)'}` }}
+                          >
+                            {isSelected && (
+                              <div className="w-2 h-2 rounded-full" style={{ background: 'var(--neon-orange)' }} />
+                            )}
+                          </div>
+                          <span
+                            className="font-body text-sm truncate"
+                            style={{ color: isSelected ? 'var(--neon-orange)' : 'var(--color-text-primary)' }}
+                          >
+                            {team.name}
+                          </span>
+                        </button>
+                        <span
+                          className="font-mono text-[10px] flex-shrink-0"
+                          style={{ color: 'var(--color-text-tertiary)' }}
+                        >
+                          {team.players.length}/{MAX_ROSTER}
+                        </span>
+                        <button
+                          onClick={() => setEditingTeamId(team.id)}
+                          aria-label={`Edit ${team.name} name`}
+                          className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full transition-colors"
+                          style={{ color: 'var(--color-text-tertiary)' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--neon-orange)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary)'}
+                        >
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setDeletingTeamId(team.id)}
+                          aria-label={`Delete ${team.name}`}
+                          className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full transition-colors"
+                          style={{ color: 'var(--color-text-tertiary)' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--neon-red)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary)'}
+                        >
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button
+                    onClick={() => createTeam()}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors font-display font-600 uppercase tracking-wider text-xs"
+                    style={{ color: 'var(--neon-orange)' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                      stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="ml-0.5">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    New Team
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
         </div>
 
         {/* Footer shortcut hint */}
@@ -220,6 +367,26 @@ export default function SideNav({ open, onClose }: SideNavProps) {
           </span>
         </div>
       </div>
+
+      {editingTeamId && (
+        <EditTeamNameModal
+          initialValue={teams.find(t => t.id === editingTeamId)?.name ?? ''}
+          onCancel={() => setEditingTeamId(null)}
+          onSave={name => { renameTeam(editingTeamId, name); setEditingTeamId(null); }}
+        />
+      )}
+
+      {deletingTeamId && (
+        <ConfirmDialog
+          title={`Delete ${teams.find(t => t.id === deletingTeamId)?.name ?? 'this team'}?`}
+          body="All the players you tracked will be removed. This action cannot be undone."
+          primaryLabel="Yes, delete it"
+          secondaryLabel="No, keep the team"
+          primaryVariant="danger"
+          onPrimary={() => { deleteTeam(deletingTeamId); setDeletingTeamId(null); }}
+          onSecondary={() => setDeletingTeamId(null)}
+        />
+      )}
     </>
   );
 }
