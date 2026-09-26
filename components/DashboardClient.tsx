@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { MAX_ROSTER, type UseTeamsReturn } from '@/lib/useTeams';
-import type { WatchlistPlayer } from '@/lib/useWatchlist';
+import type { WatchlistPlayer } from '@/lib/storage';
 import { usePreferences } from '@/lib/usePreferences';
 import type { GameStats, Player } from '@/lib/nba';
 import PlayerCard from './PlayerCard';

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import type { GameStats } from '@/lib/nba';
-import type { WatchlistPlayer } from '@/lib/useWatchlist';
+import type { WatchlistPlayer } from '@/lib/storage';
 import { getProminentStats, type DisplayStat } from '@/lib/prominence';
 import { getPlayerHeadshotUrl } from '@/lib/nba';
 

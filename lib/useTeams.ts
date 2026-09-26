@@ -5,7 +5,7 @@ import type { Player } from './nba';
 import { getTeamsData, setTeamsData } from './storage';
 import type { Team, TeamsFile, WatchlistPlayer } from './storage';
 
-export type { Team, TeamsFile };
+export type { Team, TeamsFile, WatchlistPlayer };
 export const MAX_ROSTER = 15;
 
 const EMPTY: TeamsFile = { teams: [], activeTeamId: '' };
