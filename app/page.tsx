@@ -6,12 +6,10 @@ import SideNav from '@/components/SideNav';
 import DashboardClient from '@/components/DashboardClient';
 import SkinBackdrop from '@/components/SkinBackdrop';
 import { useTeams } from '@/lib/useTeams';
-import { useTheme } from '@/components/ThemeProvider';
 
 export default function Home() {
   const [navOpen, setNavOpen] = useState(false);
   const teamsApi = useTeams();
-  const { skinTeam } = useTheme();
 
   // [ key shortcut to open nav
   useEffect(() => {
@@ -25,7 +23,7 @@ export default function Home() {
   }, []);
 
   return (
-    <main className={`min-h-screen court-lines${skinTeam ? ' skin-active' : ''}`}>
+    <main className="min-h-screen court-lines skin-active">
       <SkinBackdrop />
       <Header onOpenNav={() => setNavOpen(true)} />
       <SideNav open={navOpen} onClose={() => setNavOpen(false)} teamsApi={teamsApi} />

@@ -2,24 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Player } from './nba';
-import type { WatchlistPlayer } from './useWatchlist';
+import { getTeamsData, setTeamsData } from './storage';
+import type { Team, TeamsFile, WatchlistPlayer } from './storage';
 
+export type { Team, TeamsFile };
 export const MAX_ROSTER = 15;
-
-const TEAMS_KEY = 'courtside_teams_v1';
-const LEGACY_WATCHLIST_KEY = 'nba_watchlist_v2';
-
-export interface Team {
-  id: string;
-  name: string;
-  players: WatchlistPlayer[];
-  createdAt: number;
-}
-
-interface TeamsFile {
-  teams: Team[];
-  activeTeamId: string;
-}
 
 const EMPTY: TeamsFile = { teams: [], activeTeamId: '' };
 
@@ -37,7 +24,7 @@ function nextDefaultName(teams: Team[]): string {
 }
 
 function persist(next: TeamsFile) {
-  try { localStorage.setItem(TEAMS_KEY, JSON.stringify(next)); } catch {}
+  setTeamsData(next).catch(() => {});
 }
 
 export function useTeams() {
@@ -45,25 +32,17 @@ export function useTeams() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(TEAMS_KEY);
-      if (stored) {
-        setData(JSON.parse(stored));
-      } else {
-        // One-time migration from the old single-roster storage key.
-        const legacy = localStorage.getItem(LEGACY_WATCHLIST_KEY);
-        if (legacy) {
-          const players: WatchlistPlayer[] = JSON.parse(legacy);
-          if (Array.isArray(players) && players.length > 0) {
-            const team: Team = { id: makeTeamId(), name: 'Team #1', players, createdAt: Date.now() };
-            const next: TeamsFile = { teams: [team], activeTeamId: team.id };
-            setData(next);
-            persist(next);
-          }
-        }
-      }
-    } catch {}
-    setHydrated(true);
+    let cancelled = false;
+    getTeamsData()
+      .then(loaded => {
+        if (!cancelled) setData(loaded);
+      })
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const activeTeam = useMemo(

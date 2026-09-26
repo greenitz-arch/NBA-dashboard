@@ -1,7 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Barlow_Condensed, DM_Sans, DM_Mono } from 'next/font/google';
 import ThemeProvider from '@/components/ThemeProvider';
+import { PreferencesProvider } from '@/lib/usePreferences';
 import SkinEffects from '@/components/SkinEffects';
+import StoragePersistence from '@/components/StoragePersistence';
 import './globals.css';
 
 const displayFont = Barlow_Condensed({
@@ -33,6 +35,20 @@ export const metadata: Metadata = {
     description: 'Track your favourite NBA players — daily stats, updated every morning.',
     type: 'website',
   },
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/icons/icon-192.png',
+    apple: '/icons/icon-192.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Courtside',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0a0a0a',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -62,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body style={{ background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}>
+        <StoragePersistence />
         <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
           <filter id="woodNoise">
             <feTurbulence type="fractalNoise" baseFrequency="0.012 0.09" numOctaves={3} seed={7} result="noise" />
@@ -69,8 +86,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </filter>
         </svg>
         <ThemeProvider>
-          <SkinEffects />
-          {children}
+          <PreferencesProvider>
+            <SkinEffects />
+            {children}
+          </PreferencesProvider>
         </ThemeProvider>
       </body>
     </html>

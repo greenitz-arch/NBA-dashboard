@@ -57,7 +57,9 @@
   --color-scrollbar-track: #111118;
   --color-scrollbar-thumb: #2a2a38;
   --color-court-line:    rgba(255, 255, 255, 0.015);
-  --color-court-glow:    rgba(var(--skin-primary-rgb), 0.14);
+  /* Was 0.14 — bumped so the tint reads clearly on first load instead of
+     needing a Team Skin switch to become noticeable. */
+  --color-court-glow:    rgba(var(--skin-primary-rgb), 0.30);
   --color-sidenav-bg:    #0d0d14;
   --color-progress-bg:   rgba(255, 255, 255, 0.08);
   --color-divider:       rgba(255, 255, 255, 0.08);
@@ -92,7 +94,8 @@
   --color-scrollbar-track: #f0f0ec;
   --color-scrollbar-thumb: #c8c8d4;
   --color-court-line:    rgba(0, 0, 0, 0.04);
-  --color-court-glow:    rgba(var(--skin-primary-rgb), 0.16);
+  /* Was 0.16 — bumped to match the dark-theme increase above. */
+  --color-court-glow:    rgba(var(--skin-primary-rgb), 0.32);
   --color-sidenav-bg:    #ffffff;
   --color-progress-bg:   rgba(0, 0, 0, 0.08);
   --color-divider:       rgba(0, 0, 0, 0.08);
@@ -179,10 +182,12 @@ body {
   background-size: 100% 100%, 60px 60px, 60px 60px;
 }
 
-/* Hardwood texture — only rendered once a Team Skin is active (main gets the
-   .skin-active class from page.tsx). ::before adds a procedural wood-grain
-   noise (via the #woodNoise filter defined once in layout.tsx); ::after adds
-   plank seams tinted toward the team's colors via background-blend-mode. */
+/* Hardwood texture — always rendered as the permanent base look (main always
+   has the .skin-active class from page.tsx, despite the name). ::before adds
+   a procedural wood-grain noise (via the #woodNoise filter defined once in
+   layout.tsx); ::after adds plank seams tinted via background-blend-mode,
+   using --skin-primary/secondary-rgb — which default to plain orange and
+   switch to a team's colors whenever Team Skin is active. */
 .court-lines.skin-active {
   overflow: hidden;
 }
@@ -210,7 +215,9 @@ body {
       rgba(0,0,0,0.15) 86px,
       rgba(0,0,0,0.15) 88px
     ),
-    linear-gradient(160deg, rgba(var(--skin-primary-rgb), 0.4) 0%, rgba(var(--skin-secondary-rgb), 0.4) 100%);
+    /* Was 0.4/0.4 — bumped so the color tint itself is clearly visible
+       right away, not just after a Team Skin switch. */
+    linear-gradient(160deg, rgba(var(--skin-primary-rgb), 0.65) 0%, rgba(var(--skin-secondary-rgb), 0.65) 100%);
   background-blend-mode: normal, color;
   background-size: 100% 88px, 100% 100%;
   pointer-events: none;
