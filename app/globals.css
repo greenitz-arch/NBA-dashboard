@@ -309,6 +309,16 @@ body {
 }
 .animate-pulse-soft { animation: pulseSoft 2s ease-in-out infinite; }
 
+/* ─── First-time tutorial ("Not sure how it works?") ────────────────────── */
+@keyframes tutorialChevronPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+@keyframes tutorialPulseRing {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.25; transform: scale(1.18); }
+}
+
 /* ─── Win / Loss colors ──────────────────────────────────────────────────── */
 .text-win  { color: #4ade80; }
 .text-loss { color: #f87171; }

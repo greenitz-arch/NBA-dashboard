@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Team, Player, Conference } from '@/lib/nba';
 import { getTeamsByConference, NBA_TEAMS } from '@/lib/nba';
+import { useTutorial } from './TutorialGuide';
 
 interface PlayerSelectorProps {
   onAdd: (player: Player) => void;
@@ -88,6 +89,8 @@ export default function PlayerSelector({
   onAdd, onRemove, isWatching, isFull, onClose, initialMode = 'conference'
 }: PlayerSelectorProps) {
   const byConf = getTeamsByConference();
+  const tutorial = useTutorial();
+  const tutorialActive = tutorial.step >= 2 && tutorial.step <= 4;
 
   // Determine initial view from mode
   const getInitialView = (): View => {
@@ -143,6 +146,21 @@ export default function PlayerSelector({
     setLoadingPlayers(false);
   }, []);
 
+  // When the tutorial's own "Next" click advances a step, actually perform
+  // the real navigation this component owns (view transitions + the real
+  // roster fetch) — the tutorial card never fakes this data itself.
+  useEffect(() => {
+    if (tutorial.step === 3 && view === 'conference') {
+      setSelectedConference('East');
+      setView('conf-teams');
+    }
+    if (tutorial.step === 4 && view !== 'players') {
+      const bos = byConf.East?.find(t => t.abbreviation === 'BOS');
+      if (bos) loadPlayers(bos);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutorial.step]);
+
   const goBack = () => {
     if (searchMode) {
       setSearchMode(false);
@@ -180,12 +198,17 @@ export default function PlayerSelector({
 
   const displayPlayers = searchMode ? searchResults : players;
 
+  const closeSelector = () => {
+    if (tutorialActive) tutorial.closeAll();
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
       <div
         className="absolute inset-0 backdrop-blur-sm"
         style={{ background: 'var(--color-overlay)' }}
-        onClick={onClose}
+        onClick={closeSelector}
       />
 
       <div
@@ -198,7 +221,9 @@ export default function PlayerSelector({
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+        <div
+          ref={el => tutorial.setTarget('dialog', el)}
+          className="flex items-center justify-between px-5 py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-3">
             {showBack && (
@@ -244,7 +269,7 @@ export default function PlayerSelector({
             <button
               aria-label="Close player selector"
               title="Close"
-              onClick={onClose}
+              onClick={closeSelector}
               className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
               style={{ border: '1px solid var(--color-border)' }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}
@@ -286,9 +311,20 @@ export default function PlayerSelector({
           {/* Conference selection */}
           {!searchMode && view === 'conference' && (
             <div className="p-4 grid grid-cols-2 gap-3">
-              {(['East', 'West'] as Conference[]).map(conf => (
+              {(['East', 'West'] as Conference[]).map(conf => {
+                const isEast = conf === 'East';
+                const tutorialLocked = tutorial.step === 2 && !isEast;
+                return (
                 <button key={conf}
-                  onClick={() => { setSelectedConference(conf); setView('conf-teams'); }}
+                  ref={el => { if (tutorial.step === 2 && isEast) tutorial.setTarget('east', el); }}
+                  disabled={tutorialLocked}
+                  title={tutorialLocked ? 'Try East first' : undefined}
+                  onClick={() => {
+                    if (tutorialLocked) return;
+                    setSelectedConference(conf);
+                    if (tutorial.step === 2 && isEast) { tutorial.pickEast(); return; }
+                    setView('conf-teams');
+                  }}
                   aria-label={`Browse ${conf}ern Conference teams`}
                   className="relative rounded-xl p-5 text-left transition-all duration-200 hover:scale-[1.02] overflow-hidden"
                   style={{
@@ -296,6 +332,9 @@ export default function PlayerSelector({
                       ? 'linear-gradient(135deg, rgba(0,212,255,0.1), rgba(0,212,255,0.04))'
                       : 'linear-gradient(135deg, rgba(255,107,43,0.1), rgba(255,107,43,0.04))',
                     border: `1px solid ${conf === 'East' ? 'rgba(0,212,255,0.2)' : 'rgba(255,107,43,0.2)'}`,
+                    opacity: tutorialLocked ? 0.3 : 1,
+                    cursor: tutorialLocked ? 'not-allowed' : 'pointer',
+                    outline: tutorial.step === 2 && isEast && tutorial.picked.east ? '2px solid var(--neon-orange)' : 'none',
                   }}>
                   <span className="font-display font-800 absolute -bottom-2 -right-1 opacity-10 leading-none select-none"
                     style={{ color: conf === 'East' ? 'var(--neon-blue)' : 'var(--neon-orange)', fontSize: '5rem' }}>
@@ -312,18 +351,35 @@ export default function PlayerSelector({
                     {byConf[conf]?.length ?? 0} teams →
                   </span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
 
           {/* Conference teams list */}
           {!searchMode && view === 'conf-teams' && (
             <div className="p-2">
-              {selectedConference && byConf[selectedConference].map(team => (
-                <button key={team.id} onClick={() => loadPlayers(team)}
+              {selectedConference && byConf[selectedConference].map(team => {
+                const isBos = team.abbreviation === 'BOS';
+                const tutorialLocked = tutorial.step === 3 && !isBos;
+                return (
+                <button key={team.id}
+                  ref={el => { if (tutorial.step === 3 && isBos) tutorial.setTarget('bos', el); }}
+                  disabled={tutorialLocked}
+                  title={tutorialLocked ? 'Try Boston Celtics first' : undefined}
+                  onClick={() => {
+                    if (tutorialLocked) return;
+                    if (tutorial.step === 3 && isBos) { tutorial.pickBos(); return; }
+                    loadPlayers(team);
+                  }}
                   aria-label={`Browse ${team.full_name} roster`}
                   className="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors text-left"
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}
+                  style={{
+                    opacity: tutorialLocked ? 0.3 : 1,
+                    cursor: tutorialLocked ? 'not-allowed' : 'pointer',
+                    outline: tutorial.step === 3 && isBos && tutorial.picked.bos ? '2px solid var(--neon-orange)' : 'none',
+                  }}
+                  onMouseEnter={e => { if (!tutorialLocked) (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'; }}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                   <div>
                     <span className="font-body font-500 text-sm block" style={{ color: 'var(--color-text-primary)' }}>
@@ -340,7 +396,8 @@ export default function PlayerSelector({
                     <path d="M9 18l6-6-6-6"/>
                   </svg>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -394,6 +451,8 @@ export default function PlayerSelector({
               )}
               {!loadingPlayers && !error && displayPlayers.map(player => {
                 const watching = isWatching(player.id);
+                const isTatum = tutorial.step === 4 && player.last_name.toLowerCase() === 'tatum';
+                const tutorialLocked = tutorial.step === 4 && !watching && !isTatum;
                 return (
                   <div key={player.id}
                     className="flex items-center justify-between px-4 py-3 rounded-xl transition-colors"
@@ -425,18 +484,25 @@ export default function PlayerSelector({
                       </button>
                     ) : (
                       <button
+                        ref={el => { if (isTatum) tutorial.setTarget('add-tatum', el); }}
                         aria-label={`Add ${player.first_name} ${player.last_name} to roster`}
-                        onClick={() => !isFull && onAdd(player)}
-                        disabled={isFull}
+                        title={tutorialLocked ? 'Try Tatum first' : undefined}
+                        onClick={() => {
+                          if (isFull || tutorialLocked) return;
+                          onAdd(player);
+                          if (isTatum) tutorial.confirmAdd(player.id);
+                        }}
+                        disabled={isFull || tutorialLocked}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg font-mono text-[10px] uppercase tracking-wider transition-all"
                         style={{
                           background: isFull ? 'transparent' : 'rgba(255,107,43,0.1)',
                           border: `1px solid ${isFull ? 'var(--color-border)' : 'rgba(255,107,43,0.3)'}`,
                           color: isFull ? 'var(--color-text-tertiary)' : 'var(--neon-orange)',
-                          cursor: isFull ? 'not-allowed' : 'pointer',
+                          cursor: (isFull || tutorialLocked) ? 'not-allowed' : 'pointer',
+                          opacity: tutorialLocked ? 0.3 : 1,
                         }}
-                        onMouseEnter={e => { if (!isFull) (e.currentTarget as HTMLElement).style.background = 'rgba(255,107,43,0.2)'; }}
-                        onMouseLeave={e => { if (!isFull) (e.currentTarget as HTMLElement).style.background = 'rgba(255,107,43,0.1)'; }}>
+                        onMouseEnter={e => { if (!isFull && !tutorialLocked) (e.currentTarget as HTMLElement).style.background = 'rgba(255,107,43,0.2)'; }}
+                        onMouseLeave={e => { if (!isFull && !tutorialLocked) (e.currentTarget as HTMLElement).style.background = 'rgba(255,107,43,0.1)'; }}>
                         <svg viewBox="0 0 24 24" width="10" height="10" fill="none"
                           stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                           <path d="M12 5v14M5 12h14"/>

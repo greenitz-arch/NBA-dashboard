@@ -6,6 +6,7 @@ import type { GameStats } from '@/lib/nba';
 import type { WatchlistPlayer } from '@/lib/storage';
 import { getProminentStats, type DisplayStat } from '@/lib/prominence';
 import { getPlayerHeadshotUrl } from '@/lib/nba';
+import { useTutorial } from './TutorialGuide';
 
 interface PlayerCardProps {
   player: WatchlistPlayer;
@@ -65,6 +66,8 @@ function formatGameDate(dateStr: string): string {
 export default function PlayerCard({ player, stats, loading, onRemove }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const tutorial = useTutorial();
+  const showRemoveHint = tutorial.showRemoveHint && tutorial.hintPlayerId === player.id;
 
   if (loading) return <SkeletonCard />;
 
@@ -87,13 +90,19 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
         transition: 'all 0.28s ease',
       }}
     >
-      {/* Remove button — hover on desktop, always visible on mobile */}
+      {/* Remove button — hover on desktop, always visible on mobile.
+          Right after the tutorial finishes, it's forced visible and given a
+          4-second pulsing ring on the just-added player's card so first-time
+          visitors notice they can always remove a player. */}
       <button
         onClick={handleRemove}
-        className="remove-btn absolute top-2 right-2 z-20 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        className={`remove-btn absolute top-2 right-2 z-20 w-6 h-6 rounded-full flex items-center justify-center transition-opacity duration-200 ${showRemoveHint ? '' : 'opacity-0 group-hover:opacity-100'}`}
         style={{
           background: 'var(--color-remove-btn)',
           border: '1px solid var(--color-remove-border)',
+          opacity: showRemoveHint ? 1 : undefined,
+          boxShadow: showRemoveHint ? '0 0 0 3px rgba(255,107,43,0.35)' : undefined,
+          animation: showRemoveHint ? 'tutorialPulseRing 1.3s ease-in-out infinite' : undefined,
         }}
         title="Remove from roster"
       >

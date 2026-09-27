@@ -11,6 +11,7 @@ import EmptyState from './EmptyState';
 import Toast from './Toast';
 import TeamSwitcher from './TeamSwitcher';
 import ConfirmDialog from './ConfirmDialog';
+import { TutorialProvider } from './TutorialGuide';
 
 const POLL_INTERVAL = 10 * 60 * 1000;
 
@@ -215,7 +216,10 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
   }
 
   return (
-    <>
+    <TutorialProvider
+      onOpenSelector={() => { setSelectorMode('conference'); setSelectorOpen(true); }}
+      onCloseSelector={() => setSelectorOpen(false)}
+    >
       <section className="max-w-[1100px] mx-auto px-6 pt-8 pb-4">
 
         {/* Hero */}
@@ -240,7 +244,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
                   onClick={() => handleOpenSelector('conference')}
                   aria-label="Add more players to your roster"
                   className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
-                  style={{ background: 'var(--skin-primary)', color: 'white', boxShadow: 'var(--skin-glow)' }}
+                  style={{ background: '#000000', color: 'white', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
                     stroke="white" strokeWidth="2.5" strokeLinecap="round">
@@ -262,7 +266,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
                   onClick={() => handleOpenSelector('conference')}
                   aria-label="Add players to this team"
                   className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
-                  style={{ background: 'var(--skin-primary)', color: 'white', boxShadow: 'var(--skin-glow)' }}
+                  style={{ background: '#000000', color: 'white', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
                     stroke="white" strokeWidth="2.5" strokeLinecap="round">
@@ -381,6 +385,6 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
           onSecondary={() => setShowTeamFullSuggestion(false)}
         />
       )}
-    </>
+    </TutorialProvider>
   );
 }

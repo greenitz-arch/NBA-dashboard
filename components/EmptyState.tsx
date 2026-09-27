@@ -1,5 +1,8 @@
 'use client';
 
+import { useTutorial } from './TutorialGuide';
+import MrLineaAnimation from './MrLineaAnimation';
+
 interface EmptyStateProps {
   onOpenSelector: (mode?: 'conference' | 'all-teams' | 'search') => void;
   hasPlayers: boolean;
@@ -51,6 +54,8 @@ const tips = [
 ];
 
 export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStateProps) {
+  const tutorial = useTutorial();
+
   return (
     <>
       {/* Empty state CTA — only when no players */}
@@ -69,7 +74,7 @@ export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStatePro
             onClick={() => onOpenSelector('conference')}
             aria-label="Add your first player"
             className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl font-display font-600 uppercase tracking-wider text-base transition-all duration-200 hover:scale-105"
-            style={{ background: 'var(--neon-orange)', color: 'white', boxShadow: 'var(--glow-orange)' }}
+            style={{ background: '#000000', color: 'white', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
               stroke="white" strokeWidth="2.5" strokeLinecap="round">
@@ -77,6 +82,24 @@ export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStatePro
             </svg>
             Add Your First Player
           </button>
+
+          <div className="flex justify-center mt-3">
+            <button
+              ref={el => tutorial.setTarget('trigger', el)}
+              onClick={tutorial.start}
+              aria-label="Open the first-time tutorial"
+              className="font-body text-xs"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              Not sure how it works?{' '}
+              <span
+                className="font-700"
+                style={{ color: 'var(--neon-orange)', animation: 'tutorialChevronPulse 1.6s ease-in-out infinite' }}
+              >
+                »
+              </span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -149,6 +172,11 @@ export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStatePro
           ))}
         </div>
       </div>
+
+      {/* One-time entrance animation — only ever shown once, on an empty
+          roster; MrLineaAnimation itself remembers (via localStorage) that
+          it's already played and hides itself on every subsequent load. */}
+      {!hasPlayers && <MrLineaAnimation />}
     </>
   );
 }
