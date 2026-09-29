@@ -8,6 +8,7 @@ import { MAX_ROSTER } from '@/lib/useTeams';
 import { NBA_TEAMS } from '@/lib/teams';
 import EditTeamNameModal from './EditTeamNameModal';
 import ConfirmDialog from './ConfirmDialog';
+import SuggestFeatureModal from './SuggestFeatureModal';
 
 interface SideNavProps {
   open: boolean;
@@ -36,6 +37,7 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
   const { teams, activeTeam, switchTeam, createTeam, renameTeam, deleteTeam } = teamsApi;
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
 
   // Keyboard shortcut [ to toggle
   useEffect(() => {
@@ -344,6 +346,41 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
               </section>
             </>
           )}
+
+          {/* Divider */}
+          <div style={{ borderTop: '1px solid var(--color-border)' }} />
+
+          {/* FEEDBACK section */}
+          <section>
+            <p
+              className="font-mono text-[10px] uppercase tracking-[3px] mb-3"
+              style={{ color: 'var(--color-text-tertiary)' }}
+            >
+              Feedback
+            </p>
+            <button
+              onClick={() => setSuggestOpen(true)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors"
+              style={{ background: 'rgba(255,107,43,0.1)' }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,107,43,0.16)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,107,43,0.1)'}
+            >
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
+                stroke="var(--neon-orange)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                className="flex-shrink-0">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              <span className="flex flex-col">
+                <span className="font-body text-sm font-500" style={{ color: 'var(--neon-orange)' }}>
+                  Suggest a feature
+                </span>
+                <span className="font-mono text-[9px] mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                  Tell us what you&apos;d like to see
+                </span>
+              </span>
+            </button>
+          </section>
         </div>
 
         {/* Footer shortcut hint */}
@@ -387,6 +424,8 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
           onSecondary={() => setDeletingTeamId(null)}
         />
       )}
+
+      {suggestOpen && <SuggestFeatureModal onClose={() => setSuggestOpen(false)} />}
     </>
   );
 }

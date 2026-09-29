@@ -1,0 +1,18 @@
+<!doctype html>
+<!--
+  This page is never linked or visited by anyone. It exists only so that
+  Netlify's build step can find and register the "feature-suggestions" form
+  (Netlify scans static HTML files in the publish folder for <form> tags —
+  it can't see forms that React renders in the browser). The real form in
+  the app submits to this same form name via fetch; see
+  components/SuggestFeatureModal.tsx.
+-->
+<html>
+  <body>
+    <form name="feature-suggestions" data-netlify="true" netlify-honeypot="company">
+      <input type="text" name="idea" />
+      <input type="email" name="email" />
+      <input type="text" name="company" />
+    </form>
+  </body>
+</html>

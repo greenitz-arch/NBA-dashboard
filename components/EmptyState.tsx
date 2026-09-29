@@ -1,11 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { useTutorial } from './TutorialGuide';
-import MrLineaAnimation from './MrLineaAnimation';
+import MrLineaAnimation, { MR_LINEA_DURATION_MS } from './MrLineaAnimation';
+import PlayerSuggestions from './PlayerSuggestions';
+import SuggestFeatureModal from './SuggestFeatureModal';
+import type { Player } from '@/lib/nba';
 
 interface EmptyStateProps {
   onOpenSelector: (mode?: 'conference' | 'all-teams' | 'search') => void;
   hasPlayers: boolean;
+  onAddPlayer?: (player: Player) => void;
 }
 
 const tips = [
@@ -53,8 +58,9 @@ const tips = [
   },
 ];
 
-export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStateProps) {
+export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: EmptyStateProps) {
   const tutorial = useTutorial();
+  const [suggestOpen, setSuggestOpen] = useState(false);
 
   return (
     <>
@@ -171,12 +177,41 @@ export default function EmptyState({ onOpenSelector, hasPlayers }: EmptyStatePro
             </button>
           ))}
         </div>
+
+        {/* Quiet footer link — same visibility as the "Roster Building
+            Tools" label above it (var(--color-divider-text)), so it reads
+            as fine print rather than another call to action. */}
+        <div className="flex justify-center mt-5">
+          <button
+            onClick={() => setSuggestOpen(true)}
+            className="font-mono text-xs flex items-center gap-1.5"
+            style={{ color: 'var(--color-divider-text)' }}
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none"
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+              aria-hidden="true">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            Got an idea for Courtside?
+          </button>
+        </div>
       </div>
 
-      {/* One-time entrance animation — only ever shown once, on an empty
-          roster; MrLineaAnimation itself remembers (via localStorage) that
-          it's already played and hides itself on every subsequent load. */}
+      {suggestOpen && <SuggestFeatureModal onClose={() => setSuggestOpen(false)} />}
+
+      {/* Entrance animation — plays once per page load while the roster is
+          empty (no loop, no "seen it" memory). */}
       {!hasPlayers && <MrLineaAnimation />}
+
+      {/* 4 random players from ESPN's top 100, revealed once the trail line
+          has finished drawing. */}
+      {!hasPlayers && onAddPlayer && (
+        <PlayerSuggestions
+          onAdd={onAddPlayer}
+          revealAfterMs={MR_LINEA_DURATION_MS + 300}
+        />
+      )}
     </>
   );
 }

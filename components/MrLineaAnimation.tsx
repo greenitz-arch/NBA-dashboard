@@ -61,6 +61,9 @@ const starts: number[] = [];
 (() => { let t = 0; for (const s of SEGMENTS) { starts.push(t); t += s.dur; } })();
 const TOTAL = starts[starts.length - 1] + SEGMENTS[SEGMENTS.length - 1].dur;
 
+// How long the whole animation runs, so other parts of the page can wait for it.
+export const MR_LINEA_DURATION_MS = TOTAL;
+
 function lerp(a: number, b: number, p: number) { return a + (b - a) * p; }
 function pt(base: { x: number; y: number }, len: number, ang: number) {
   return { x: base.x + len * Math.sin(ang), y: base.y + len * Math.cos(ang) };

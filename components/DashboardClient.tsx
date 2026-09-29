@@ -281,7 +281,10 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
               className="font-display font-800 uppercase tracking-tight leading-none"
               style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', color: 'var(--color-text-primary)' }}
             >
-              Your <span style={{ color: 'var(--skin-primary)' }}>Roster</span>
+              Your{' '}
+              <span style={{ color: 'var(--skin-primary)', WebkitTextStroke: '2px #000', paintOrder: 'stroke fill' }}>
+                Roster
+              </span>
             </h1>
           )}
         </div>
@@ -351,6 +354,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
         <EmptyState
           onOpenSelector={handleOpenSelector}
           hasPlayers={hasPlayers}
+          onAddPlayer={handleAddPlayer}
         />
       </section>
 
