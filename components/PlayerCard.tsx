@@ -5,7 +5,7 @@ import Image from 'next/image';
 import type { GameStats } from '@/lib/nba';
 import type { WatchlistPlayer } from '@/lib/storage';
 import { getProminentStats, type DisplayStat } from '@/lib/prominence';
-import { getPlayerHeadshotUrl } from '@/lib/nba';
+import { getPlayerHeadshotUrl, getEspnHeadshotUrl, hasNbaHeadshot } from '@/lib/nba';
 import { useTutorial } from './TutorialGuide';
 
 interface PlayerCardProps {
@@ -65,6 +65,7 @@ function formatGameDate(dateStr: string): string {
 
 export default function PlayerCard({ player, stats, loading, onRemove }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
+  const [useEspnPhoto, setUseEspnPhoto] = useState(false);
   const [removing, setRemoving] = useState(false);
   const tutorial = useTutorial();
   const showRemoveHint = tutorial.showRemoveHint && tutorial.hintPlayerId === player.id;
@@ -72,7 +73,15 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
   if (loading) return <SkeletonCard />;
 
   const displayStats = stats ? getProminentStats(stats) : [];
-  const headshotUrl = getPlayerHeadshotUrl(player.id);
+  const hasNbaPhoto = hasNbaHeadshot(player);
+  const headshotUrl = hasNbaPhoto && !useEspnPhoto
+    ? getPlayerHeadshotUrl(player)
+    : getEspnHeadshotUrl(player.id);
+  // If the NBA.com photo fails to load, try ESPN's before showing initials.
+  const handleImgError = () => {
+    if (hasNbaPhoto && !useEspnPhoto) setUseEspnPhoto(true);
+    else setImgError(true);
+  };
 
   const handleRemove = () => {
     setRemoving(true);
@@ -127,11 +136,12 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
         </span>
         {!imgError ? (
           <Image
+            key={headshotUrl}
             src={headshotUrl}
             alt={`${player.first_name} ${player.last_name}`}
             fill
             className="object-contain object-bottom"
-            onError={() => setImgError(true)}
+            onError={handleImgError}
             sizes="220px"
           />
         ) : (

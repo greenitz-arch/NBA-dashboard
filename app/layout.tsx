@@ -3,7 +3,6 @@ import { Barlow_Condensed, DM_Sans, DM_Mono } from 'next/font/google';
 import ThemeProvider from '@/components/ThemeProvider';
 import { PreferencesProvider } from '@/lib/usePreferences';
 import SkinEffects from '@/components/SkinEffects';
-import StoragePersistence from '@/components/StoragePersistence';
 import './globals.css';
 
 const displayFont = Barlow_Condensed({
@@ -78,7 +77,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body style={{ background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}>
-        <StoragePersistence />
         <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
           <filter id="woodNoise">
             <feTurbulence type="fractalNoise" baseFrequency="0.012 0.09" numOctaves={3} seed={7} result="noise" />

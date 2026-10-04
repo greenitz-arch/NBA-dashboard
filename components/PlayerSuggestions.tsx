@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import type { Player, Team } from '@/lib/nba';
-import { NBA_TEAMS, getPlayerHeadshotUrl } from '@/lib/nba';
+import { NBA_TEAMS, getPlayerHeadshotUrl, getEspnHeadshotUrl, hasNbaHeadshot } from '@/lib/nba';
 import { ESPN_TOP_100_NAMES } from '@/lib/espnTop100';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -102,7 +102,17 @@ interface PlayerSuggestionsProps {
 
 function SuggestionCard({ player, onAdd }: { player: Player; onAdd: (p: Player) => void }) {
   const [imgError, setImgError] = useState(false);
+  const [useEspnPhoto, setUseEspnPhoto] = useState(false);
   const fullName = `${player.first_name} ${player.last_name}`;
+  const hasNbaPhoto = hasNbaHeadshot(player);
+  const photoUrl = hasNbaPhoto && !useEspnPhoto
+    ? getPlayerHeadshotUrl(player)
+    : getEspnHeadshotUrl(player.id);
+  // If the NBA.com photo fails to load, try ESPN's before showing initials.
+  const handleImgError = () => {
+    if (hasNbaPhoto && !useEspnPhoto) setUseEspnPhoto(true);
+    else setImgError(true);
+  };
 
   return (
     <div
@@ -130,11 +140,12 @@ function SuggestionCard({ player, onAdd }: { player: Player; onAdd: (p: Player) 
         </span>
         {!imgError ? (
           <Image
-            src={getPlayerHeadshotUrl(player.id)}
+            key={photoUrl}
+            src={photoUrl}
             alt={fullName}
             fill
             className="object-contain object-bottom"
-            onError={() => setImgError(true)}
+            onError={handleImgError}
             sizes="220px"
           />
         ) : (

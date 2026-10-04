@@ -1,4 +1,52 @@
-import { get, set } from "idb-keyval";
+import { get as idbGet, set as idbSet } from "idb-keyval";
+
+// Safety net for browsers that block IndexedDB (some private/locked-down
+// modes in Safari and Firefox). If saving to IndexedDB fails, the app keeps
+// working using a temporary in-memory copy for the rest of the visit.
+const memoryFallback = new Map<string, unknown>();
+
+async function get(key: string): Promise<unknown> {
+  try {
+    const value = await idbGet(key);
+    if (value !== undefined) return value;
+  } catch {
+    // IndexedDB unavailable -- fall through to the temporary copy
+  }
+  return memoryFallback.get(key);
+}
+
+// Returns true only if the data was really written to IndexedDB.
+async function set(key: string, value: unknown): Promise<boolean> {
+  memoryFallback.set(key, value);
+  try {
+    await idbSet(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Asks the browser to keep the saved roster from being auto-deleted.
+// Done only after the person has actually added a player (not on page load),
+// because Firefox shows a permission pop-up when this is requested.
+let persistAsked = false;
+function askForPersistentStorage(data: TeamsFile) {
+  if (persistAsked) return;
+  if (!data.teams.some((t) => t.players.length > 0)) return;
+  persistAsked = true;
+  try {
+    if (typeof navigator !== "undefined" && navigator.storage?.persist) {
+      navigator.storage
+        .persisted()
+        .then((already) => {
+          if (!already) navigator.storage.persist();
+        })
+        .catch(() => {});
+    }
+  } catch {
+    // not supported -- nothing to do
+  }
+}
 
 const TEAMS_KEY = "courtside_teams_v1";
 const LEGACY_WATCHLIST_KEY = "nba_watchlist_v2";
@@ -47,8 +95,7 @@ export async function getTeamsData(): Promise<TeamsFile> {
   if (storedTeams) {
     try {
       const parsed: TeamsFile = JSON.parse(storedTeams);
-      await set(TEAMS_KEY, parsed);
-      window.localStorage.removeItem(TEAMS_KEY);
+      if (await set(TEAMS_KEY, parsed)) window.localStorage.removeItem(TEAMS_KEY);
       return parsed;
     } catch {
       // fall through to next migration path
@@ -62,8 +109,7 @@ export async function getTeamsData(): Promise<TeamsFile> {
       if (Array.isArray(players) && players.length > 0) {
         const team: Team = { id: makeTeamId(), name: "Team #1", players, createdAt: Date.now() };
         const next: TeamsFile = { teams: [team], activeTeamId: team.id };
-        await set(TEAMS_KEY, next);
-        window.localStorage.removeItem(LEGACY_WATCHLIST_KEY);
+        if (await set(TEAMS_KEY, next)) window.localStorage.removeItem(LEGACY_WATCHLIST_KEY);
         return next;
       }
     } catch {
@@ -75,7 +121,9 @@ export async function getTeamsData(): Promise<TeamsFile> {
 }
 
 export async function setTeamsData(data: TeamsFile) {
-  return set(TEAMS_KEY, data);
+  const ok = await set(TEAMS_KEY, data);
+  askForPersistentStorage(data);
+  return ok;
 }
 
 export async function getPrefs(): Promise<Record<string, unknown>> {
@@ -88,8 +136,7 @@ export async function getPrefs(): Promise<Record<string, unknown>> {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      await set(PREFS_KEY, parsed);
-      window.localStorage.removeItem(PREFS_KEY);
+      if (await set(PREFS_KEY, parsed)) window.localStorage.removeItem(PREFS_KEY);
       return parsed;
     } catch {
       // ignore malformed legacy data
