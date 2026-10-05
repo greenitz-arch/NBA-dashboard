@@ -12,6 +12,10 @@ import Toast from './Toast';
 import TeamSwitcher from './TeamSwitcher';
 import ConfirmDialog from './ConfirmDialog';
 import { TutorialProvider } from './TutorialGuide';
+import FantasyToggle from './FantasyToggle';
+import { RosterStatusStrip, TeamStrengths, HotColdList } from './FantasyPanels';
+import ShareTeamModal from './ShareTeamModal';
+import { useFantasy } from '@/lib/useFantasy';
 
 const POLL_INTERVAL = 10 * 60 * 1000;
 
@@ -120,15 +124,20 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ teamsApi }: DashboardClientProps) {
   const { teams, activeTeam, watchlist, addPlayer, removePlayer, isWatching, isFull, switchTeam, createTeam, renameTeam, deleteTeam, hydrated } = teamsApi;
-  const { prefs } = usePreferences();
+  const { prefs, updatePref } = usePreferences();
   const [stats, setStats] = useState<Record<number, GameStats>>({});
   const [loadingStats, setLoadingStats] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorMode, setSelectorMode] = useState<'conference' | 'all-teams' | 'search'>('conference');
   const [showToast, setShowToast] = useState(false);
   const [showTeamFullSuggestion, setShowTeamFullSuggestion] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  const fantasyOn = prefs.fantasyMode;
+  const fantasy = useFantasy(watchlist, fantasyOn && hydrated);
+  const fantasyReady = Object.keys(fantasy.data).length > 0;
 
   const fetchStats = useCallback(async (playerIds: number[], force = false) => {
     if (playerIds.length === 0) { setStats({}); return; }
@@ -221,6 +230,13 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
       onCloseSelector={() => setSelectorOpen(false)}
     >
       <section className="max-w-[1100px] mx-auto px-6 pt-8 pb-4">
+
+        {/* Fantasy mode switch */}
+        {hasPlayers && (
+          <div className="flex justify-end mb-3">
+            <FantasyToggle on={fantasyOn} onChange={v => updatePref('fantasyMode', v)} />
+          </div>
+        )}
 
         {/* Hero */}
         <div className={`mb-4 ${hasTeams ? 'text-center' : ''}`}>
@@ -324,7 +340,39 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
             onCreate={createTeam}
             onRename={renameTeam}
             onDelete={deleteTeam}
+            actions={
+              hasPlayers ? (
+                <button
+                  onClick={() => setShareOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-xs transition-all duration-200 hover:scale-105"
+                  style={{
+                    border: '1px solid var(--skin-primary)',
+                    color: 'var(--color-text-primary)',
+                    background: 'var(--color-hover)',
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                  </svg>
+                  Share my team
+                </button>
+              ) : undefined
+            }
           />
+        )}
+
+        {/* Fantasy: roster status strip */}
+        {fantasyOn && hasPlayers && (
+          fantasyReady ? (
+            <RosterStatusStrip players={watchlist} data={fantasy.data} injuryOk={fantasy.injuryOk} />
+          ) : (
+            <p className="font-mono text-[10px] uppercase tracking-widest mb-4 text-center"
+              style={{ color: 'var(--color-text-secondary)' }}>
+              Loading fantasy data…
+            </p>
+          )
         )}
 
         {/* Player grid */}
@@ -342,11 +390,19 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
                     stats={stats[player.id] ?? null}
                     loading={loadingStats && !stats[player.id]}
                     onRemove={removePlayer}
+                    fantasyOn={fantasyOn}
+                    fantasy={fantasy.data[player.id] ?? null}
                   />
                 </div>
               ))}
             </div>
             <ScrollArrow gridRef={gridRef} playerCount={watchlist.length} />
+            {fantasyOn && fantasyReady && (
+              <div className="mb-4">
+                <TeamStrengths players={watchlist} data={fantasy.data} />
+                <HotColdList players={watchlist} data={fantasy.data} />
+              </div>
+            )}
           </>
         )}
 
@@ -358,9 +414,21 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
         />
       </section>
 
+      {shareOpen && activeTeam && (
+        <ShareTeamModal
+          teamName={activeTeam.name}
+          players={sortedWatchlist}
+          fantasyOn={fantasyOn && fantasyReady}
+          data={fantasy.data}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
+
       {selectorOpen && (
         <PlayerSelector
           onAdd={handleAddPlayer}
+          onAddMany={(list) => list.forEach(p => addPlayer(p))}
+          slotsLeft={MAX_ROSTER - watchlist.length}
           onRemove={removePlayer}
           isWatching={isWatching}
           isFull={isFull}

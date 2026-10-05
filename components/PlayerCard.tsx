@@ -7,12 +7,16 @@ import type { WatchlistPlayer } from '@/lib/storage';
 import { getProminentStats, type DisplayStat } from '@/lib/prominence';
 import { getPlayerHeadshotUrl, getEspnHeadshotUrl, hasNbaHeadshot } from '@/lib/nba';
 import { useTutorial } from './TutorialGuide';
+import { STATUS_COLOR, STATUS_LABEL, type PlayerFantasy } from '@/lib/fantasy';
+import { FlameIcon, SnowflakeIcon } from './FantasyPanels';
 
 interface PlayerCardProps {
   player: WatchlistPlayer;
   stats: GameStats | null;
   loading?: boolean;
   onRemove: (id: number) => void;
+  fantasyOn?: boolean;
+  fantasy?: PlayerFantasy | null;
 }
 
 function StatPill({ stat }: { stat: DisplayStat }) {
@@ -63,7 +67,7 @@ function formatGameDate(dateStr: string): string {
   return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
 }
 
-export default function PlayerCard({ player, stats, loading, onRemove }: PlayerCardProps) {
+export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
   const [useEspnPhoto, setUseEspnPhoto] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -83,6 +87,9 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
     else setImgError(true);
   };
 
+  const fStatus = fantasyOn ? fantasy?.status ?? null : null;
+  const isOut = fStatus === 'out';
+
   const handleRemove = () => {
     setRemoving(true);
     setTimeout(() => onRemove(player.id), 280);
@@ -94,7 +101,8 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
       style={{
         background: 'var(--color-card)',
         border: '1px solid var(--color-border)',
-        opacity: removing ? 0 : 1,
+        opacity: removing ? 0 : isOut ? 0.55 : 1,
+        filter: isOut ? 'grayscale(1)' : undefined,
         transform: removing ? 'scale(0.95)' : undefined,
         transition: 'all 0.28s ease',
       }}
@@ -134,6 +142,18 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
         >
           {player.team_abbreviation}
         </span>
+        {fStatus && (
+          <div
+            className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 rounded-full px-2 py-1"
+            style={{ background: 'rgba(0,0,0,0.55)' }}
+            title={fantasy?.statusNote || STATUS_LABEL[fStatus]}
+          >
+            <span className="rounded-full" style={{ width: 9, height: 9, background: STATUS_COLOR[fStatus] }} />
+            {fStatus !== 'healthy' && (
+              <span className="font-mono text-[9px] uppercase tracking-wider text-white">{STATUS_LABEL[fStatus]}</span>
+            )}
+          </div>
+        )}
         {!imgError ? (
           <Image
             key={headshotUrl}
@@ -213,6 +233,38 @@ export default function PlayerCard({ player, stats, loading, onRemove }: PlayerC
             style={{ color: 'var(--color-text-tertiary)' }}>
             No recent game data
           </p>
+        )}
+
+        {/* Fantasy mode: value score + hot/cold badge */}
+        {fantasyOn && (
+          <div
+            className="flex items-center justify-between mt-2.5 pt-2.5"
+            style={{ borderTop: '1px solid var(--color-border)' }}
+          >
+            {fantasy?.value != null ? (
+              <span
+                className="font-mono text-[10px] uppercase tracking-widest rounded-full px-2 py-1"
+                style={{ background: 'rgba(var(--skin-primary-rgb),0.15)', color: 'var(--color-text-primary)' }}
+                title={fantasy.basis === 'preseason' ? 'Based on preseason games' : 'Fantasy value, 50 is a typical starter'}
+              >
+                Value {fantasy.value}
+              </span>
+            ) : (
+              <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-tertiary)' }}>
+                Waiting for games
+              </span>
+            )}
+            {fantasy?.form === 'hot' && (
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: '#ff8d5c' }}>
+                <FlameIcon size={13} /> Hot
+              </span>
+            )}
+            {fantasy?.form === 'cold' && (
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: '#7cb8ec' }}>
+                <SnowflakeIcon size={13} /> Cold
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -4,9 +4,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Team, Player, Conference } from '@/lib/nba';
 import { getTeamsByConference, NBA_TEAMS } from '@/lib/nba';
 import { useTutorial } from './TutorialGuide';
+import { TeamLogo, PlayerAvatar } from './SelectorBits';
+import { MAX_ROSTER } from '@/lib/useTeams';
+import { getLeagueMinutes, fetchRosterMinutes, minutesColor, minutesTextColor } from '@/lib/minutes';
+import { pickFullRoster } from '@/lib/fullRoster';
 
 interface PlayerSelectorProps {
   onAdd: (player: Player) => void;
+  // Adds several players in one go ("Add full roster"). Optional: without it the button is hidden.
+  onAddMany?: (players: Player[]) => void;
+  // How many open spots the current team has (defaults to 15, or 0 when full).
+  slotsLeft?: number;
   onRemove?: (playerId: number) => void;
   isWatching: (id: number) => boolean;
   isFull: boolean;
@@ -26,7 +34,11 @@ type EspnAthlete = {
   displayName: string;
   position?: { abbreviation: string };
   jersey?: string;
+  [key: string]: unknown;
 };
+
+// A roster entry plus the extras this dialog needs.
+type ListPlayer = Player & { minutes?: number; twoWay?: boolean };
 
 // Netlify's server IP range is blocked by ESPN (same situation as
 // stats.nba.com), but ESPN allows direct requests from a visitor's own
@@ -47,9 +59,16 @@ async function fetchEspnRoster(espnId: number): Promise<EspnAthlete[]> {
   return athletes;
 }
 
-function toPlayer(a: EspnAthlete, team: Team): Player {
+// ESPN may label two-way contract players somewhere in a player's data.
+// We look for the words "two-way" anywhere in it (it's harmless if absent).
+function looksTwoWay(a: EspnAthlete): boolean {
+  try { return /two[-\s]?way/i.test(JSON.stringify(a)); } catch { return false; }
+}
+
+function toPlayer(a: EspnAthlete, team: Team): ListPlayer {
   const parts = a.displayName.split(' ');
   return {
+    twoWay: looksTwoWay(a),
     id: Number(a.id),
     first_name: parts[0] ?? '',
     last_name: parts.slice(1).join(' ') ?? '',
@@ -59,7 +78,7 @@ function toPlayer(a: EspnAthlete, team: Team): Player {
   };
 }
 
-async function fetchRoster(teamId: number): Promise<Player[]> {
+async function fetchRoster(teamId: number): Promise<ListPlayer[]> {
   const team = NBA_TEAMS.find(t => t.id === teamId);
   if (!team) return [];
   const athletes = await fetchEspnRoster(team.espnId);
@@ -67,7 +86,7 @@ async function fetchRoster(teamId: number): Promise<Player[]> {
     .sort((a, b) => a.last_name.localeCompare(b.last_name));
 }
 
-async function fetchSearch(query: string): Promise<Player[]> {
+async function fetchSearch(query: string): Promise<ListPlayer[]> {
   const q = query.toLowerCase();
   const perTeam = await Promise.allSettled(
     NBA_TEAMS.map(async team => {
@@ -78,15 +97,34 @@ async function fetchSearch(query: string): Promise<Player[]> {
     })
   );
   return perTeam
-    .filter((r): r is PromiseFulfilledResult<Player[]> => r.status === 'fulfilled')
+    .filter((r): r is PromiseFulfilledResult<ListPlayer[]> => r.status === 'fulfilled')
     .flatMap(r => r.value)
     .slice(0, 25);
+}
+
+// Adds minutes-per-game to a roster and sorts it (most minutes first).
+// If minutes can't be loaded, the roster stays A-Z and nothing else changes.
+async function attachMinutes(roster: ListPlayer[]): Promise<{ players: ListPlayer[]; season: string | null }> {
+  const league = await Promise.race([
+    getLeagueMinutes(),
+    new Promise<null>(resolve => setTimeout(() => resolve(null), 6000)),
+  ]);
+  let byId: Map<number, number> | null = league?.byId ?? null;
+  let season: string | null = league?.seasonLabel ?? null;
+  if (!byId) {
+    byId = await fetchRosterMinutes(roster.map(p => p.id));
+    season = byId.size > 0 ? 'latest season' : null;
+  }
+  const withMinutes = roster.map(p => ({ ...p, minutes: byId?.get(p.id) }));
+  if (!withMinutes.some(p => p.minutes !== undefined)) return { players: roster, season: null };
+  withMinutes.sort((a, b) => (b.minutes ?? -1) - (a.minutes ?? -1));
+  return { players: withMinutes, season };
 }
 
 const ALL_TEAMS_SORTED = [...NBA_TEAMS].sort((a, b) => a.full_name.localeCompare(b.full_name));
 
 export default function PlayerSelector({
-  onAdd, onRemove, isWatching, isFull, onClose, initialMode = 'conference'
+  onAdd, onAddMany, slotsLeft, onRemove, isWatching, isFull, onClose, initialMode = 'conference'
 }: PlayerSelectorProps) {
   const byConf = getTeamsByConference();
   const tutorial = useTutorial();
@@ -102,9 +140,10 @@ export default function PlayerSelector({
   const [view, setView] = useState<View>(getInitialView());
   const [selectedConference, setSelectedConference] = useState<Conference | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] = useState<ListPlayer[]>([]);
+  const [minutesSeason, setMinutesSeason] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Player[]>([]);
+  const [searchResults, setSearchResults] = useState<ListPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [searchMode, setSearchMode] = useState(initialMode === 'search');
   const [error, setError] = useState<string | null>(null);
@@ -137,8 +176,12 @@ export default function PlayerSelector({
     setSelectedTeam(team);
     setView('players');
     setError(null);
+    setMinutesSeason(null);
     try {
-      setPlayers(await fetchRoster(team.id));
+      const roster = await fetchRoster(team.id);
+      const withMinutes = await attachMinutes(roster);
+      setPlayers(withMinutes.players);
+      setMinutesSeason(withMinutes.season);
     } catch {
       setError('Could not load roster. Please try again.');
       setPlayers([]);
@@ -177,6 +220,7 @@ export default function PlayerSelector({
       }
       setSelectedTeam(null);
       setPlayers([]);
+      setMinutesSeason(null);
       return;
     }
     if (view === 'conf-teams') {
@@ -197,6 +241,30 @@ export default function PlayerSelector({
   };
 
   const displayPlayers = searchMode ? searchResults : players;
+  const hasMinutes = !searchMode && players.some(p => p.minutes !== undefined);
+
+  // "Add full roster": the 15 standard-contract players (two-way players left out),
+  // limited to the open spots on the current team, skipping anyone already added.
+  const spots = slotsLeft ?? (isFull ? 0 : MAX_ROSTER);
+  const plan = pickFullRoster(players, MAX_ROSTER);
+  const notYetAdded = plan.picked.filter(p => !isWatching(p.id));
+  const toAdd = notYetAdded.slice(0, Math.max(0, spots));
+  const showFullRoster = !!onAddMany && !searchMode && view === 'players'
+    && !loadingPlayers && !error && players.length > 0;
+  const fullRosterDisabled = tutorialActive || plan.unknown || toAdd.length === 0;
+  const fullRosterLabel =
+    plan.unknown ? 'Add full roster'
+    : toAdd.length > 0 ? `Add full roster (${toAdd.length})`
+    : spots <= 0 ? 'Team is full'
+    : 'Full roster added ✓';
+  const fullRosterNotes: string[] = [];
+  if (plan.unknown) {
+    fullRosterNotes.push("Couldn't load minutes data, so two-way players can't be skipped. Add players one at a time for now.");
+  } else {
+    if (plan.skippedTwoWay > 0) fullRosterNotes.push(`Leaves out ${plan.skippedTwoWay} two-way player${plan.skippedTwoWay > 1 ? 's' : ''}`);
+    if (plan.droppedByMinutes > 0) fullRosterNotes.push(`Skips the ${plan.droppedByMinutes} player${plan.droppedByMinutes > 1 ? 's' : ''} with the fewest minutes (likely two-way)`);
+    if (spots > 0 && notYetAdded.length > spots) fullRosterNotes.push(`Only ${spots} open spot${spots > 1 ? 's' : ''} on this team, so it adds the ${spots} with the most minutes`);
+  }
 
   const closeSelector = () => {
     if (tutorialActive) tutorial.closeAll();
@@ -311,7 +379,7 @@ export default function PlayerSelector({
           {/* Conference selection */}
           {!searchMode && view === 'conference' && (
             <div className="p-4 grid grid-cols-2 gap-3">
-              {(['East', 'West'] as Conference[]).map(conf => {
+              {(['West', 'East'] as Conference[]).map(conf => {
                 const isEast = conf === 'East';
                 const tutorialLocked = tutorial.step === 2 && !isEast;
                 return (
@@ -381,14 +449,17 @@ export default function PlayerSelector({
                   }}
                   onMouseEnter={e => { if (!tutorialLocked) (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'; }}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                  <div>
-                    <span className="font-body font-500 text-sm block" style={{ color: 'var(--color-text-primary)' }}>
-                      {team.full_name}
-                    </span>
-                    <span className="font-mono text-[10px] uppercase tracking-widest mt-0.5 block"
-                      style={{ color: 'var(--color-text-secondary)' }}>
-                      {team.abbreviation} · {team.division}
-                    </span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <TeamLogo abbr={team.abbreviation} size={32} />
+                    <div className="min-w-0">
+                      <span className="font-body font-500 text-sm block" style={{ color: 'var(--color-text-primary)' }}>
+                        {team.full_name}
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-widest mt-0.5 block"
+                        style={{ color: 'var(--color-text-secondary)' }}>
+                        {team.abbreviation} · {team.division}
+                      </span>
+                    </div>
                   </div>
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
                     stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -407,7 +478,7 @@ export default function PlayerSelector({
               {ALL_TEAMS_SORTED.map(team => (
                 <button key={team.id} onClick={() => loadPlayers(team)}
                   aria-label={`Browse ${team.full_name} roster`}
-                  className="flex flex-col items-start px-3 py-2.5 rounded-xl text-left transition-all"
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all"
                   style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
                   onMouseEnter={e => {
                     (e.currentTarget as HTMLElement).style.borderColor = 'var(--neon-orange)';
@@ -417,13 +488,16 @@ export default function PlayerSelector({
                     (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)';
                     (e.currentTarget as HTMLElement).style.background = 'var(--color-card)';
                   }}>
-                  <span className="font-body font-500 text-sm leading-tight"
-                    style={{ color: 'var(--color-text-primary)' }}>
-                    {team.full_name}
-                  </span>
-                  <span className="font-mono text-[9px] uppercase tracking-widest mt-0.5"
-                    style={{ color: 'var(--color-text-secondary)' }}>
-                    {team.abbreviation} · {team.conference}
+                  <TeamLogo abbr={team.abbreviation} size={26} />
+                  <span className="flex flex-col items-start min-w-0">
+                    <span className="font-body font-500 text-sm leading-tight"
+                      style={{ color: 'var(--color-text-primary)' }}>
+                      {team.full_name}
+                    </span>
+                    <span className="font-mono text-[9px] uppercase tracking-widest mt-0.5"
+                      style={{ color: 'var(--color-text-secondary)' }}>
+                      {team.abbreviation} · {team.conference}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -433,6 +507,36 @@ export default function PlayerSelector({
           {/* Players list */}
           {((!searchMode && view === 'players') || searchMode) && (
             <div className="p-2">
+              {showFullRoster && (
+                <div className="px-2 pt-1 pb-2">
+                  <button
+                    onClick={() => { if (!fullRosterDisabled) onAddMany?.(toAdd); }}
+                    disabled={fullRosterDisabled}
+                    aria-label="Add the full roster to your team"
+                    className="w-full py-2.5 rounded-xl font-mono text-xs uppercase tracking-wider transition-all"
+                    style={{
+                      background: fullRosterDisabled ? 'transparent' : 'rgba(255,107,43,0.12)',
+                      border: `1px solid ${fullRosterDisabled ? 'var(--color-border)' : 'var(--neon-orange)'}`,
+                      color: fullRosterDisabled ? 'var(--color-text-tertiary)' : 'var(--neon-orange)',
+                      cursor: fullRosterDisabled ? 'not-allowed' : 'pointer',
+                      opacity: tutorialActive ? 0.3 : 1,
+                    }}>
+                    {toAdd.length > 0 && !fullRosterDisabled ? '+ ' : ''}{fullRosterLabel}
+                  </button>
+                  {fullRosterNotes.length > 0 && (
+                    <p className="font-body text-[11px] text-center mt-1.5 leading-snug"
+                      style={{ color: 'var(--color-text-secondary)' }}>
+                      {fullRosterNotes.join(' · ')}
+                    </p>
+                  )}
+                  {hasMinutes && (
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-center mt-1.5"
+                      style={{ color: 'var(--color-text-secondary)' }}>
+                      Most minutes first{minutesSeason ? ` · ${minutesSeason} avg` : ''}
+                    </p>
+                  )}
+                </div>
+              )}
               {loadingPlayers && (
                 <div className="p-8 text-center font-mono text-xs uppercase tracking-widest"
                   style={{ color: 'var(--color-text-secondary)' }}>Loading…</div>
@@ -455,19 +559,33 @@ export default function PlayerSelector({
                 const tutorialLocked = tutorial.step === 4 && !watching && !isTatum;
                 return (
                   <div key={player.id}
-                    className="flex items-center justify-between px-4 py-3 rounded-xl transition-colors"
-                    style={{ background: watching ? 'var(--color-watched-bg)' : 'transparent' }}
+                    className="flex items-center justify-between gap-3 pl-3 pr-3 py-2.5 rounded-xl transition-colors"
+                    style={{
+                      background: watching ? 'var(--color-watched-bg)' : 'transparent',
+                      borderLeft: `3px solid ${hasMinutes ? (player.minutes !== undefined ? minutesColor(player.minutes) : 'var(--color-border)') : 'transparent'}`,
+                    }}
                     onMouseEnter={e => { if (!watching) (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = watching ? 'var(--color-watched-bg)' : 'transparent'; }}>
-                    <div>
-                      <span className="font-body font-500 text-sm block" style={{ color: 'var(--color-text-primary)' }}>
-                        {player.first_name} {player.last_name}
-                      </span>
-                      <span className="font-mono text-[10px] uppercase tracking-widest mt-0.5 block"
-                        style={{ color: 'var(--color-text-secondary)' }}>
-                        {player.team?.abbreviation} · {player.position || '—'}
-                      </span>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <PlayerAvatar player={player} size={36} />
+                      <div className="min-w-0">
+                        <span className="font-body font-500 text-sm block truncate" style={{ color: 'var(--color-text-primary)' }}>
+                          {player.first_name} {player.last_name}
+                        </span>
+                        <span className="font-mono text-[10px] uppercase tracking-widest mt-0.5 block"
+                          style={{ color: 'var(--color-text-secondary)' }}>
+                          {player.team?.abbreviation} · {player.position || '—'}{player.twoWay ? ' · 2-way' : ''}
+                        </span>
+                      </div>
                     </div>
+                    {hasMinutes && (
+                      <span className="font-mono text-[10px] px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                        style={player.minutes !== undefined
+                          ? { background: minutesColor(player.minutes), color: minutesTextColor(player.minutes), fontWeight: 600 }
+                          : { background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                        {player.minutes !== undefined ? `${player.minutes.toFixed(1)} MIN` : '— MIN'}
+                      </span>
+                    )}
                     {watching ? (
                       <button
                         aria-label={`Remove ${player.first_name} ${player.last_name} from roster`}

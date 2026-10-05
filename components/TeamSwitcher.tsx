@@ -13,9 +13,10 @@ interface TeamSwitcherProps {
   onCreate: () => void;
   onRename: (teamId: string, name: string) => void;
   onDelete: (teamId: string) => void;
+  actions?: React.ReactNode;
 }
 
-export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, onRename, onDelete }: TeamSwitcherProps) {
+export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, onRename, onDelete, actions }: TeamSwitcherProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -63,10 +64,11 @@ export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, on
         </button>
       </div>
 
+      <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
       {/* Prominent Edit Title button */}
       <button
         onClick={() => setEditOpen(true)}
-        className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-xs transition-all duration-200 hover:scale-105"
+        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-xs transition-all duration-200 hover:scale-105"
         style={{
           border: '1px solid var(--color-border)',
           color: 'var(--color-text-secondary)',
@@ -88,6 +90,8 @@ export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, on
         </svg>
         Edit Title
       </button>
+        {actions}
+      </div>
 
       {dropdownOpen && (
         <div

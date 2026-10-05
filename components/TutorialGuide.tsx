@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 // ─────────────────────────────────────────────────────────────────────────
 // First-time tutorial ("Not sure how it works? »")
 //
-// This is a guided, 5-step walkthrough that runs *on top of* the real
+// This is a guided, 6-step walkthrough that runs *on top of* the real
 // PlayerSelector dialog — it does not re-implement the conference/team/
 // roster screens. It only renders:
 //   1) a small floating tip card (with copy + Back/Next/dots), and
@@ -19,7 +19,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 // ─────────────────────────────────────────────────────────────────────────
 
 interface TutorialContextValue {
-  step: number; // 0 = inactive, 1-5 = active steps
+  step: number; // 0 = inactive, 1-6 = active steps
   picked: { east: boolean; bos: boolean };
   showRemoveHint: boolean;
   hintPlayerId: number | null;
@@ -36,6 +36,8 @@ interface TutorialContextValue {
   backToStep3: () => void;
   confirmAdd: (playerId: number) => void;
   backToStep4: () => void;
+  toStep6: () => void;
+  backToStep5: () => void;
   finish: () => void;
   setTarget: (key: string, el: HTMLElement | null) => void;
 }
@@ -50,7 +52,7 @@ const TutorialContext = createContext<TutorialContextValue>({
   toStep2: noop, backToStep1: noop, pickEast: noop,
   toStep3: noop, backToStep2: noop, pickBos: noop,
   toStep4: noop, backToStep3: noop,
-  confirmAdd: noop, backToStep4: noop, finish: noop,
+  confirmAdd: noop, backToStep4: noop, toStep6: noop, backToStep5: noop, finish: noop,
   setTarget: noop,
 });
 
@@ -88,14 +90,19 @@ export function TutorialProvider({
   const pickBos = useCallback(() => { setPicked(p => ({ ...p, bos: true })); }, []);
   const toStep4 = useCallback(() => { setStep(4); }, []);
   const backToStep3 = useCallback(() => { setStep(3); }, []);
-  const backToStep4 = useCallback(() => { setStep(4); }, []);
+  // Step 5 (menu) has the dialog closed, so going back to step 4 re-opens it.
+  const backToStep4 = useCallback(() => { onOpenSelector(); setStep(4); }, [onOpenSelector]);
+  const toStep6 = useCallback(() => { setStep(6); }, []);
+  const backToStep5 = useCallback(() => { setStep(5); }, []);
 
   // Clicking the real "+ Add" on Tatum finishes the guided part immediately —
   // no extra "Next" click, since the add itself is the completing action.
+  // The dialog closes so the next step can point at the menu button behind it.
   const confirmAdd = useCallback((playerId: number) => {
     setHintPlayerId(playerId);
+    onCloseSelector();
     setStep(5);
-  }, []);
+  }, [onCloseSelector]);
 
   const finish = useCallback(() => {
     onCloseSelector();
@@ -115,7 +122,7 @@ export function TutorialProvider({
       toStep2, backToStep1, pickEast,
       toStep3, backToStep2, pickBos,
       toStep4, backToStep3,
-      confirmAdd, backToStep4, finish,
+      confirmAdd, backToStep4, toStep6, backToStep5, finish,
       setTarget,
     }}>
       {children}
@@ -127,7 +134,7 @@ export function TutorialProvider({
 function dots(active: number) {
   return (
     <div className="flex items-center gap-1.5">
-      {[1, 2, 3, 4, 5].map(n => (
+      {[1, 2, 3, 4, 5, 6].map(n => (
         <span key={n} className="rounded-full" style={{
           width: 6, height: 6,
           background: n === active ? 'var(--neon-orange)' : 'var(--color-border)',
@@ -148,15 +155,26 @@ function TutorialOverlay({ targets }: { targets: React.MutableRefObject<Record<s
     if (!card) return;
 
     const ringKey = t.step === 2 ? 'east' : t.step === 3 ? 'bos' : t.step === 4 ? 'add-tatum' : null;
-    const ringTarget = ringKey ? targets.current[ringKey] : null;
+    // Step 5 spotlights the real menu button in the header.
+    const menuBtn = t.step === 5
+      ? (document.querySelector('button[aria-label="Open settings"]') as HTMLElement | null)
+      : null;
+    const ringTarget = menuBtn || (ringKey ? targets.current[ringKey] : null);
+    const wantsCenter = t.step === 6 || (t.step === 5 && !menuBtn);
 
     // Steps 2-4 point the card at the actual highlighted button (below it,
     // or above if there's no room) so the card never sits on top of the
     // thing the visitor needs to click. Step 1 (nothing open yet) anchors
     // under the trigger link; step 5 (nothing highlighted) anchors under
     // the real dialog's header.
-    const anchor = ringTarget || targets.current[t.step === 1 ? 'trigger' : 'dialog'];
-    if (anchor) {
+    const anchor = wantsCenter ? null : (ringTarget || targets.current[t.step === 1 ? 'trigger' : 'dialog']);
+    if (wantsCenter) {
+      const mw = card.offsetWidth || 320;
+      const mh = card.offsetHeight || 160;
+      card.style.left = `${Math.max(12, (window.innerWidth - mw) / 2)}px`;
+      card.style.top = `${Math.max(12, (window.innerHeight - mh) / 2)}px`;
+      card.style.visibility = 'visible';
+    } else if (anchor) {
       const r = anchor.getBoundingClientRect();
       const mw = card.offsetWidth || 320;
       const mh = card.offsetHeight || 160;
@@ -174,6 +192,10 @@ function TutorialOverlay({ targets }: { targets: React.MutableRefObject<Record<s
       if (ringTarget) {
         const rr = ringTarget.getBoundingClientRect();
         ring.style.display = 'block';
+        // Step 5 also dims everything except the menu button (spotlight effect).
+        ring.style.boxShadow = t.step === 5
+          ? '0 0 0 3px rgba(255,107,43,0.3), 0 0 0 9999px rgba(0,0,0,0.6)'
+          : '0 0 0 3px rgba(255,107,43,0.2)';
         ring.style.top = `${rr.top - 6}px`;
         ring.style.left = `${rr.left - 6}px`;
         ring.style.width = `${rr.width + 12}px`;
@@ -291,15 +313,38 @@ function TutorialOverlay({ targets }: { targets: React.MutableRefObject<Record<s
         {t.step === 5 && (
           <>
             <div className="flex items-center justify-between mb-2">
+              <span className="font-display font-700 text-base uppercase tracking-wide" style={{ color: 'var(--color-text-primary)' }}>This is your menu</span>
+              <button onClick={t.finish} aria-label="Close tutorial" style={{ color: 'var(--color-text-secondary)' }}>✕</button>
+            </div>
+            <p className="font-body text-sm mb-2" style={{ color: 'var(--color-text-primary)' }}>
+              Tap it any time to customize Courtside. Here&apos;s what you&apos;ll find:
+            </p>
+            <ul className="font-body text-sm mb-3 space-y-1.5" style={{ color: 'var(--color-text-primary)' }}>
+              <li>🌗&nbsp; Switch between dark and light mode</li>
+              <li>🎨&nbsp; Pick your Team Skin colors</li>
+              <li>↕️&nbsp; Sort your players</li>
+              <li>➕&nbsp; Add and manage more teams</li>
+            </ul>
+            <div className="flex items-center justify-between mt-3">
+              <button onClick={t.backToStep4} className="font-mono text-xs px-3 py-1.5 rounded-lg" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>← Back</button>
+              {dots(5)}
+              <button onClick={t.toStep6} className="font-mono text-xs px-3 py-1.5 rounded-lg font-600" style={{ background: 'var(--neon-orange)', color: '#fff' }}>Next →</button>
+            </div>
+          </>
+        )}
+
+        {t.step === 6 && (
+          <>
+            <div className="flex items-center justify-between mb-2">
               <span className="font-display font-700 text-base uppercase tracking-wide" style={{ color: 'var(--color-text-primary)' }}>Nice work</span>
               <button onClick={t.finish} aria-label="Close tutorial" style={{ color: 'var(--color-text-secondary)' }}>✕</button>
             </div>
             <p className="font-body text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>
-              Jayson Tatum is on your roster now — check the page behind this popup. Repeat these steps to add up to 15 players. This guide is always one tap away if you need it again.
+              Jayson Tatum is on your roster now. Repeat these steps to add up to 15 players, or tap <b>Add full roster</b> on any team to add its whole lineup at once. This guide is always one tap away if you need it again.
             </p>
             <div className="flex items-center justify-between mt-3">
-              <button onClick={t.backToStep4} className="font-mono text-xs px-3 py-1.5 rounded-lg" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>← Back</button>
-              {dots(5)}
+              <button onClick={t.backToStep5} className="font-mono text-xs px-3 py-1.5 rounded-lg" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>← Back</button>
+              {dots(6)}
               <button onClick={t.finish} className="font-mono text-xs px-3 py-1.5 rounded-lg font-600" style={{ background: 'var(--neon-orange)', color: '#fff' }}>Got it</button>
             </div>
           </>

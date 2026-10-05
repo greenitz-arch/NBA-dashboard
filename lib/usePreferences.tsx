@@ -7,10 +7,12 @@ export type SortOption = 'recent' | 'date-added' | 'az' | 'by-team' | 'by-positi
 
 export interface Preferences {
   sortBy: SortOption;
+  fantasyMode: boolean;
 }
 
 const DEFAULTS: Preferences = {
   sortBy: 'recent',
+  fantasyMode: false,
 };
 
 interface PreferencesContextValue {

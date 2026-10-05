@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTutorial } from './TutorialGuide';
 import MrLineaAnimation, { MR_LINEA_DURATION_MS } from './MrLineaAnimation';
 import PlayerSuggestions from './PlayerSuggestions';
@@ -12,6 +12,11 @@ interface EmptyStateProps {
   hasPlayers: boolean;
   onAddPlayer?: (player: Player) => void;
 }
+
+// The "First time here?" nudge bubble: shows once per page load, only on the
+// empty state, after NUDGE_DELAY_MS with no click/tap/keypress.
+let nudgeDone = false;
+const NUDGE_DELAY_MS = 9000;
 
 const tips = [
   {
@@ -61,6 +66,28 @@ const tips = [
 export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: EmptyStateProps) {
   const tutorial = useTutorial();
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [showNudge, setShowNudge] = useState(false);
+  const nudgeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (hasPlayers || nudgeDone) return;
+    const timer = setTimeout(() => setShowNudge(true), NUDGE_DELAY_MS);
+    // Any interaction means they're finding their way: cancel for this page load.
+    const dismiss = (e: Event) => {
+      const target = e.target as Node | null;
+      if (target && nudgeRef.current?.contains(target)) return; // let the bubble's own click through
+      clearTimeout(timer);
+      nudgeDone = true;
+      setShowNudge(false);
+    };
+    window.addEventListener('pointerdown', dismiss);
+    window.addEventListener('keydown', dismiss);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', dismiss);
+      window.removeEventListener('keydown', dismiss);
+    };
+  }, [hasPlayers]);
 
   return (
     <>
@@ -89,22 +116,49 @@ export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: 
             Add Your First Player
           </button>
 
-          <div className="flex justify-center mt-3">
-            <button
-              ref={el => tutorial.setTarget('trigger', el)}
-              onClick={tutorial.start}
-              aria-label="Open the first-time tutorial"
-              className="font-body text-xs"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              Not sure how it works?{' '}
-              <span
-                className="font-700"
-                style={{ color: 'var(--neon-orange)', animation: 'tutorialChevronPulse 1.6s ease-in-out infinite' }}
+          <style>{`
+            @keyframes courtsidePillPulse {
+              0%   { box-shadow: 0 0 0 0 rgba(0,0,0,0.45); }
+              100% { box-shadow: 0 0 0 12px rgba(0,0,0,0); }
+            }
+            @keyframes courtsideNudgeIn {
+              from { opacity: 0; transform: translate(-50%, 6px); }
+              to   { opacity: 1; transform: translate(-50%, 0); }
+            }
+          `}</style>
+          <div className="flex justify-center mt-5">
+            <div className="relative inline-block max-w-full">
+              {showNudge && tutorial.step === 0 && (
+                <button
+                  ref={nudgeRef}
+                  onClick={() => { nudgeDone = true; setShowNudge(false); tutorial.start(); }}
+                  aria-label="First time here? Take a 30-second tour"
+                  className="absolute left-1/2 bottom-full mb-3 w-[230px] rounded-xl px-3 py-2 font-body text-xs leading-snug text-center"
+                  style={{ background: '#ffffff', color: '#111111', boxShadow: '0 8px 24px rgba(0,0,0,0.35)', animation: 'courtsideNudgeIn .4s ease-out forwards' }}
+                >
+                  First time here? Take a 30-second tour.
+                  <span aria-hidden="true" className="absolute left-1/2 -bottom-1 w-2.5 h-2.5 rotate-45"
+                    style={{ background: '#ffffff', marginLeft: -5 }} />
+                </button>
+              )}
+              <button
+                ref={el => tutorial.setTarget('trigger', el)}
+                onClick={tutorial.start}
+                aria-label="Open the first-time tutorial"
+                className="inline-flex items-center gap-2 rounded-full pl-2 pr-4 py-2 font-body text-xs sm:text-[13px] font-500 text-left"
+                style={{
+                  background: 'rgba(255,255,255,0.94)', color: '#111111', border: '2px solid #111111',
+                  animation: 'courtsidePillPulse 1.8s ease-out infinite',
+                }}
               >
-                »
-              </span>
-            </button>
+                <span aria-hidden="true" className="w-[22px] h-[22px] rounded-full flex items-center justify-center flex-shrink-0 font-700"
+                  style={{ background: '#111111', color: '#ffffff', fontSize: 13 }}>?</span>
+                <span>
+                  Not sure how it works? Take the quick tour{' '}
+                  <span className="font-700" style={{ animation: 'tutorialChevronPulse 1.6s ease-in-out infinite' }}>»</span>
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}
