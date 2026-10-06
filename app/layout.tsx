@@ -3,6 +3,7 @@ import { Barlow_Condensed, DM_Sans, DM_Mono } from 'next/font/google';
 import ThemeProvider from '@/components/ThemeProvider';
 import { PreferencesProvider } from '@/lib/usePreferences';
 import SkinEffects from '@/components/SkinEffects';
+import SiteFooter from '@/components/SiteFooter';
 import './globals.css';
 
 const displayFont = Barlow_Condensed({
@@ -87,6 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PreferencesProvider>
             <SkinEffects />
             {children}
+            <SiteFooter />
           </PreferencesProvider>
         </ThemeProvider>
       </body>
