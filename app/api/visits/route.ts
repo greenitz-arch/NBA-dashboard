@@ -18,8 +18,14 @@ export async function POST(req: Request) {
 
     const rand = Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
     await visitStore().set(`n/${dayKey()}/${id}/${rand}`, '1');
-  } catch {
-    // Storage isn't available (for example when running locally): do nothing.
+  } catch (err) {
+    // Storage isn't available (for example when running locally).
+    // Visitors never see this; the status code (503) and the message let the owner diagnose it.
+    console.error('visit not saved:', err);
+    return NextResponse.json(
+      { saved: false, reason: err instanceof Error ? err.message : String(err) },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } }
+    );
   }
   return new NextResponse(null, { status: 204 });
 }
