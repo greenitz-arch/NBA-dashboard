@@ -15,7 +15,9 @@ import { TutorialProvider } from './TutorialGuide';
 import FantasyToggle from './FantasyToggle';
 import { RosterStatusStrip, TeamStrengths, HotColdList } from './FantasyPanels';
 import ShareTeamModal from './ShareTeamModal';
+import HeadToHead from './HeadToHead';
 import { useFantasy } from '@/lib/useFantasy';
+import { fetchCardStats } from '@/lib/clientStats';
 
 const POLL_INTERVAL = 10 * 60 * 1000;
 
@@ -123,7 +125,7 @@ interface DashboardClientProps {
 }
 
 export default function DashboardClient({ teamsApi }: DashboardClientProps) {
-  const { teams, activeTeam, watchlist, addPlayer, removePlayer, isWatching, isFull, switchTeam, createTeam, renameTeam, deleteTeam, hydrated } = teamsApi;
+  const { teams, activeTeam, watchlist, addPlayer, removePlayer, restorePlayer, createRivalTeam, isWatching, isFull, switchTeam, createTeam, renameTeam, deleteTeam, hydrated } = teamsApi;
   const { prefs, updatePref } = usePreferences();
   const [stats, setStats] = useState<Record<number, GameStats>>({});
   const [loadingStats, setLoadingStats] = useState(false);
@@ -132,12 +134,23 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
   const [showToast, setShowToast] = useState(false);
   const [showTeamFullSuggestion, setShowTeamFullSuggestion] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // Which team the player picker is adding to: your own team, or the head-to-head rival.
+  const [selectorTarget, setSelectorTarget] = useState<'mine' | 'rival'>('mine');
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const fantasyOn = prefs.fantasyMode;
   const fantasy = useFantasy(watchlist, fantasyOn && hydrated);
   const fantasyReady = Object.keys(fantasy.data).length > 0;
+
+  // Head-to-head matchup: the rival is just another Courtside team.
+  const rivalTeam = teams.find(t => t.id === prefs.rivalTeamId && t.id !== activeTeam?.id) ?? null;
+  const otherTeams = teams.filter(t => t.id !== activeTeam?.id);
+  const h2hOn = fantasyOn && prefs.h2hMode && !!activeTeam;
+
+  // Lets the stats loader below look up each player without re-creating itself.
+  const watchlistRef = useRef(watchlist);
+  watchlistRef.current = watchlist;
 
   const fetchStats = useCallback(async (playerIds: number[], force = false) => {
     if (playerIds.length === 0) { setStats({}); return; }
@@ -156,13 +169,16 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
 
     setLoadingStats(true);
     try {
-      const res = await fetch(`/api/stats?playerIds=${playerIds.join(',')}`);
-      const data = await res.json();
-      const parsed: Record<number, GameStats> = {};
-      for (const [k, v] of Object.entries(data)) parsed[Number(k)] = v as GameStats;
+      // Stats now come from the visitor's browser (ESPN refuses the server).
+      const byId = new Map(watchlistRef.current.map(p => [p.id, p]));
+      const list = playerIds.map(id => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+      const parsed: Record<number, GameStats> = await fetchCardStats(list);
       const ts = Date.now();
       setStats(parsed);
-      sessionStorage.setItem(cacheKey, JSON.stringify({ data: parsed, ts }));
+      // Only remember a successful answer, so a failed try is retried next time.
+      if (Object.keys(parsed).length > 0) {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ data: parsed, ts }));
+      }
       sessionStorage.setItem('last_stats_fetch', String(ts));
       window.dispatchEvent(new Event('stats-updated'));
     } catch {}
@@ -186,9 +202,22 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
 
   const handleOpenSelector = useCallback((mode: 'conference' | 'all-teams' | 'search' = 'conference') => {
     if (isFull) { setShowToast(true); return; }
+    setSelectorTarget('mine');
     setSelectorMode(mode);
     setSelectorOpen(true);
   }, [isFull]);
+
+  const handleOpenRivalSelector = useCallback(() => {
+    setSelectorTarget('rival');
+    setSelectorMode('conference');
+    setSelectorOpen(true);
+  }, []);
+
+  const handleCreateRival = useCallback(() => {
+    const id = createRivalTeam();
+    updatePref('rivalTeamId', id);
+    handleOpenRivalSelector();
+  }, [createRivalTeam, updatePref, handleOpenRivalSelector]);
 
   const handleAddPlayer = useCallback((player: Player) => {
     const wasOneBelowCap = watchlist.length === MAX_ROSTER - 1;
@@ -226,16 +255,49 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
 
   return (
     <TutorialProvider
-      onOpenSelector={() => { setSelectorMode('conference'); setSelectorOpen(true); }}
+      onOpenSelector={() => { setSelectorTarget('mine'); setSelectorMode('conference'); setSelectorOpen(true); }}
       onCloseSelector={() => setSelectorOpen(false)}
     >
       <section className="max-w-[1100px] mx-auto px-6 pt-8 pb-4">
 
         {/* Fantasy mode switch */}
-        {hasPlayers && (
-          <div className="flex justify-end mb-3">
-            <FantasyToggle on={fantasyOn} onChange={v => updatePref('fantasyMode', v)} />
+        {(hasPlayers || (fantasyOn && hasTeams)) && (
+          <div className="flex flex-wrap justify-end gap-2 mb-3">
+            {hasPlayers && (
+              <FantasyToggle
+                on={prefs.noSpoilers}
+                onChange={v => updatePref('noSpoilers', v)}
+                label="No spoilers"
+                icon="eye"
+              />
+            )}
+            {hasPlayers && (
+              <FantasyToggle on={fantasyOn} onChange={v => updatePref('fantasyMode', v)} beta />
+            )}
+            {fantasyOn && hasTeams && (
+              <FantasyToggle
+                on={prefs.h2hMode}
+                onChange={v => updatePref('h2hMode', v)}
+                label="Head to head matchup"
+              />
+            )}
           </div>
+        )}
+
+        {/* Beta notice, visible whenever fantasy mode is on */}
+        {fantasyOn && (
+          <p
+            className="flex items-center justify-end gap-2 font-body text-xs mb-3 text-right"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <span
+              className="font-mono text-[9px] uppercase tracking-widest rounded-full px-1.5 py-0.5 flex-shrink-0"
+              style={{ background: 'rgba(var(--skin-primary-rgb),0.2)', color: 'var(--color-text-primary)' }}
+            >
+              Beta
+            </span>
+            Fantasy mode is new. Values and live data are still being fine-tuned.
+          </p>
         )}
 
         {/* Hero */}
@@ -364,7 +426,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
         )}
 
         {/* Fantasy: roster status strip */}
-        {fantasyOn && hasPlayers && (
+        {fantasyOn && hasPlayers && !h2hOn && (
           fantasyReady ? (
             <RosterStatusStrip players={watchlist} data={fantasy.data} injuryOk={fantasy.injuryOk} />
           ) : (
@@ -375,8 +437,27 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
           )
         )}
 
+        {/* Head-to-head matchup (replaces the grid while it is switched on) */}
+        {h2hOn && activeTeam && (
+          <HeadToHead
+            mine={activeTeam}
+            rival={rivalTeam}
+            otherTeams={otherTeams}
+            maxRoster={MAX_ROSTER}
+            onRemove={(teamId, playerId) =>
+              teamId === activeTeam.id ? removePlayer(playerId) : removePlayer(playerId, teamId)
+            }
+            onRestore={restorePlayer}
+            onAddMine={() => handleOpenSelector('conference')}
+            onAddRival={handleOpenRivalSelector}
+            onPickRival={id => updatePref('rivalTeamId', id)}
+            onClearRival={() => updatePref('rivalTeamId', '')}
+            onCreateRival={handleCreateRival}
+          />
+        )}
+
         {/* Player grid */}
-        {hasPlayers && (
+        {hasPlayers && !h2hOn && (
           <>
             <div ref={gridRef} className="grid grid-cols-3 lg:grid-cols-5 gap-3 mb-2">
               {sortedWatchlist.map((player, i) => (
@@ -392,6 +473,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
                     onRemove={removePlayer}
                     fantasyOn={fantasyOn}
                     fantasy={fantasy.data[player.id] ?? null}
+                    hideResult={prefs.noSpoilers}
                   />
                 </div>
               ))}
@@ -424,7 +506,20 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
         />
       )}
 
-      {selectorOpen && (
+      {selectorOpen && selectorTarget === 'rival' && rivalTeam && (
+        <PlayerSelector
+          onAdd={player => { addPlayer(player, rivalTeam.id); }}
+          onAddMany={list => list.forEach(p => addPlayer(p, rivalTeam.id))}
+          slotsLeft={MAX_ROSTER - rivalTeam.players.length}
+          onRemove={id => removePlayer(id, rivalTeam.id)}
+          isWatching={id => rivalTeam.players.some(p => p.id === id)}
+          isFull={rivalTeam.players.length >= MAX_ROSTER}
+          onClose={() => setSelectorOpen(false)}
+          initialMode="conference"
+        />
+      )}
+
+      {selectorOpen && selectorTarget === 'mine' && (
         <PlayerSelector
           onAdd={handleAddPlayer}
           onAddMany={(list) => list.forEach(p => addPlayer(p))}

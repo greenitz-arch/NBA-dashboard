@@ -8,11 +8,17 @@ export type SortOption = 'recent' | 'date-added' | 'az' | 'by-team' | 'by-positi
 export interface Preferences {
   sortBy: SortOption;
   fantasyMode: boolean;
+  h2hMode: boolean;
+  rivalTeamId: string;
+  noSpoilers: boolean;
 }
 
 const DEFAULTS: Preferences = {
   sortBy: 'recent',
   fantasyMode: false,
+  h2hMode: false,
+  rivalTeamId: '',
+  noSpoilers: true,
 };
 
 interface PreferencesContextValue {

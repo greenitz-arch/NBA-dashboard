@@ -17,6 +17,7 @@ interface PlayerCardProps {
   onRemove: (id: number) => void;
   fantasyOn?: boolean;
   fantasy?: PlayerFantasy | null;
+  hideResult?: boolean; // "No spoilers": hide the W / L of the last game
 }
 
 function StatPill({ stat }: { stat: DisplayStat }) {
@@ -67,7 +68,7 @@ function formatGameDate(dateStr: string): string {
   return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
 }
 
-export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null }: PlayerCardProps) {
+export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null, hideResult = false }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
   const [useEspnPhoto, setUseEspnPhoto] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -213,9 +214,11 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
               {stats.isHome ? 'vs' : '@'} {stats.opponentAbbr}
             </span>
             <div className="flex items-center gap-1.5">
-              <span className={`font-mono text-[10px] font-700 uppercase ${stats.outcome === 'W' ? 'text-win' : 'text-loss'}`}>
-                {stats.outcome}
-              </span>
+              {!hideResult && (
+                <span className={`font-mono text-[10px] font-700 uppercase ${stats.outcome === 'W' ? 'text-win' : 'text-loss'}`}>
+                  {stats.outcome}
+                </span>
+              )}
               <span className="font-mono text-[10px]" style={{ color: 'var(--color-text-secondary)' }}>
                 {formatGameDate(stats.gameDate)}
               </span>

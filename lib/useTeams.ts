@@ -52,7 +52,9 @@ export function useTeams() {
 
   const watchlist = activeTeam?.players ?? [];
 
-  const addPlayer = useCallback((player: Player): 'added' | 'full' | 'exists' => {
+  // teamId is optional: without it the player goes to the active team (as before).
+  // The head-to-head view passes the rival team's id to add to the rival.
+  const addPlayer = useCallback((player: Player, teamId?: string): 'added' | 'full' | 'exists' => {
     let result: 'added' | 'full' | 'exists' = 'added';
     setData(prev => {
       let teams = prev.teams;
@@ -65,7 +67,8 @@ export function useTeams() {
         activeTeamId = team.id;
       }
 
-      const activeIdx = teams.findIndex(t => t.id === activeTeamId);
+      const targetId = teamId ?? activeTeamId;
+      const activeIdx = teams.findIndex(t => t.id === targetId);
       if (activeIdx === -1) return prev;
 
       const active = teams[activeIdx];
@@ -92,9 +95,9 @@ export function useTeams() {
     return result;
   }, []);
 
-  const removePlayer = useCallback((playerId: number) => {
+  const removePlayer = useCallback((playerId: number, teamId?: string) => {
     setData(prev => {
-      const idx = prev.teams.findIndex(t => t.id === prev.activeTeamId);
+      const idx = prev.teams.findIndex(t => t.id === (teamId ?? prev.activeTeamId));
       if (idx === -1) return prev;
       const team = prev.teams[idx];
       const nextTeams = [...prev.teams];
@@ -103,6 +106,40 @@ export function useTeams() {
       persist(next);
       return next;
     });
+  }, []);
+
+  // Puts a removed player back (used by the Undo bar in the head-to-head view).
+  const restorePlayer = useCallback((teamId: string, entry: WatchlistPlayer, index: number) => {
+    setData(prev => {
+      const idx = prev.teams.findIndex(t => t.id === teamId);
+      if (idx === -1) return prev;
+      const team = prev.teams[idx];
+      if (team.players.some(p => p.id === entry.id) || team.players.length >= MAX_ROSTER) return prev;
+      const players = [...team.players];
+      players.splice(Math.min(Math.max(index, 0), players.length), 0, entry);
+      const nextTeams = [...prev.teams];
+      nextTeams[idx] = { ...team, players };
+      const next: TeamsFile = { ...prev, teams: nextTeams };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  // Creates a team for the head-to-head rival WITHOUT switching to it, so the
+  // person stays on their own team. Returns the new team's id.
+  const createRivalTeam = useCallback((): string => {
+    const newId = makeTeamId();
+    setData(prev => {
+      const used = new Set(prev.teams.map(t => t.name));
+      let name = 'Rival Team';
+      let n = 2;
+      while (used.has(name)) name = `Rival Team ${n++}`;
+      const team: Team = { id: newId, name, players: [], createdAt: Date.now() };
+      const next: TeamsFile = { teams: [...prev.teams, team], activeTeamId: prev.activeTeamId };
+      persist(next);
+      return next;
+    });
+    return newId;
   }, []);
 
   const isWatching = useCallback((playerId: number) => {
@@ -168,6 +205,8 @@ export function useTeams() {
     watchlist,
     addPlayer,
     removePlayer,
+    restorePlayer,
+    createRivalTeam,
     isWatching,
     isFull,
     switchTeam,

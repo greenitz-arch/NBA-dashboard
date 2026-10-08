@@ -46,7 +46,7 @@ async function getJson(url: string) {
 
 type InjurySaved = { ids: [string, InjuryEntry][]; names: [string, InjuryEntry][] };
 
-async function loadInjuries(): Promise<InjuryIndex | null> {
+export async function loadInjuries(): Promise<InjuryIndex | null> {
   const cached = cacheGet<InjurySaved>('fantasy_injuries');
   if (cached) {
     return { byId: new Map(cached.ids), byName: new Map(cached.names) };
