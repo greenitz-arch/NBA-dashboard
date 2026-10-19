@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WatchlistPlayer } from '@/lib/storage';
 import { STATUS_LABEL, type PlayerFantasy } from '@/lib/fantasy';
+import { buildShareUrl } from '@/lib/shareLink';
 
 interface ShareTeamModalProps {
   teamName: string;
@@ -137,6 +138,8 @@ export default function ShareTeamModal({ teamName, players, fantasyOn, data, onC
   const [preview, setPreview] = useState('');
   const [message, setMessage] = useState('');
   const [canShare, setCanShare] = useState(false);
+  const [canShareLink, setCanShareLink] = useState(false);
+  const [linkText, setLinkText] = useState(''); // shown only if the browser won't copy for us
 
   useEffect(() => {
     const canvas = document.createElement('canvas');
@@ -153,6 +156,7 @@ export default function ShareTeamModal({ teamName, players, fantasyOn, data, onC
     } catch {
       setCanShare(false);
     }
+    setCanShareLink(typeof navigator !== 'undefined' && typeof navigator.share === 'function');
     const esc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -200,6 +204,26 @@ export default function ShareTeamModal({ teamName, players, fantasyOn, data, onC
     }
   };
 
+  const handleCopyLink = async () => {
+    const url = buildShareUrl(teamName, players);
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkText('');
+      setMessage('Link copied. Anyone who opens it can add this team to their own Courtside.');
+    } catch {
+      setLinkText(url);
+      setMessage('Copy the link below.');
+    }
+  };
+
+  const handleShareLink = async () => {
+    try {
+      await navigator.share({ title: teamName, text: `${teamName} on Courtside`, url: buildShareUrl(teamName, players) });
+    } catch {
+      // person closed the share menu -- nothing to do
+    }
+  };
+
   const btn =
     'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105';
 
@@ -232,15 +256,31 @@ export default function ShareTeamModal({ teamName, players, fantasyOn, data, onC
           </p>
         )}
         <div className="flex flex-wrap gap-2 justify-center mt-4">
+          <button onClick={handleCopyLink} className={btn} style={{ background: '#000', color: '#fff' }}>
+            Copy link
+          </button>
+          {canShareLink && (
+            <button
+              onClick={handleShareLink}
+              className={btn}
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+            >
+              Share link
+            </button>
+          )}
           {canShare && (
-            <button onClick={handleShare} className={btn} style={{ background: '#000', color: '#fff' }}>
-              Share
+            <button
+              onClick={handleShare}
+              className={btn}
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+            >
+              Share image
             </button>
           )}
           <button
             onClick={handleDownload}
             className={btn}
-            style={canShare ? { border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' } : { background: '#000', color: '#fff' }}
+            style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
           >
             Download image
           </button>
@@ -252,6 +292,16 @@ export default function ShareTeamModal({ teamName, players, fantasyOn, data, onC
             Close
           </button>
         </div>
+        {linkText && (
+          <input
+            readOnly
+            value={linkText}
+            onFocus={e => e.currentTarget.select()}
+            aria-label="Share link"
+            className="w-full mt-3 px-3 py-2 rounded-lg font-mono text-[11px]"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+          />
+        )}
         <p className="font-body text-xs text-center mt-2 min-h-[16px]" style={{ color: 'var(--color-text-secondary)' }}>
           {preview ? message : ''}
         </p>

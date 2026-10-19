@@ -20,6 +20,7 @@ import {
   type TeamGame,
 } from '@/lib/matchup';
 import type { InjuryEntry } from '@/lib/fantasy';
+import { MSG } from '@/lib/messages';
 
 const GREEN = '#3fbf7f';
 const RED = '#e5484d';
@@ -212,7 +213,7 @@ function PlayerRow({ row, onRemove }: { row: Row; onRemove: () => void }) {
           </>
         ) : (
           <p className="font-body text-xs mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-            No games played yet
+            {row.tg?.state === 'pre' ? MSG.liveSoon : 'No games played yet'}
           </p>
         )
       )}

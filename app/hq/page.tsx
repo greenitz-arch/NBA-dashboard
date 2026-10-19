@@ -28,8 +28,6 @@ export default function HqPage() {
         setData(body as VisitSummary);
         try {
           sessionStorage.setItem(PW_KEY, pw);
-          localStorage.setItem(IGNORE_KEY, '1'); // stop counting your own visits on this device
-          setIgnoring(true);
         } catch { /* ignore */ }
       } else if (body?.error === 'wrong-password') {
         setError('Wrong password.');
@@ -138,13 +136,23 @@ export default function HqPage() {
               style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
               {loading ? 'Refreshing…' : 'Refresh'}
             </button>
-            {ignoring && (
-              <button
-                onClick={() => { try { localStorage.removeItem(IGNORE_KEY); } catch { /* ignore */ } setIgnoring(false); }}
-                className="font-body text-xs underline" style={{ color: 'var(--color-text-secondary)' }}>
-                Your own visits on this device aren&apos;t counted. Count them again
-              </button>
-            )}
+            <button
+              onClick={() => {
+                try {
+                  if (ignoring) localStorage.removeItem(IGNORE_KEY);
+                  else localStorage.setItem(IGNORE_KEY, '1');
+                } catch { /* ignore */ }
+                setIgnoring(!ignoring);
+              }}
+              className="px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider"
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+              {ignoring ? 'Count my visits again' : "Don't count my visits"}
+            </button>
+            <span className="font-body text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {ignoring
+                ? "This device's visits are NOT being counted."
+                : "This device's visits are being counted."}
+            </span>
           </div>
         </>
       )}

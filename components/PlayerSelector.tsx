@@ -9,6 +9,7 @@ import { MAX_ROSTER } from '@/lib/useTeams';
 import { getLeagueMinutes, fetchRosterMinutes, minutesColor, minutesTextColor } from '@/lib/minutes';
 import { pickFullRoster } from '@/lib/fullRoster';
 
+import { MSG } from '@/lib/messages';
 interface PlayerSelectorProps {
   onAdd: (player: Player) => void;
   // Adds several players in one go ("Add full roster"). Optional: without it the button is hidden.
@@ -147,6 +148,8 @@ export default function PlayerSelector({
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [searchMode, setSearchMode] = useState(initialMode === 'search');
   const [error, setError] = useState<string | null>(null);
+  const [errorRetry, setErrorRetry] = useState<(() => void) | null>(null); // what "Try again" does
+  const [searchTick, setSearchTick] = useState(0); // bumping this runs the search again
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -161,21 +164,24 @@ export default function PlayerSelector({
     searchTimer.current = setTimeout(async () => {
       setLoadingPlayers(true);
       setError(null);
+      setErrorRetry(null);
       try {
         setSearchResults(await fetchSearch(searchQuery));
       } catch {
-        setError('Could not load players. Please try again.');
+        setError(MSG.generic);
+        setErrorRetry(() => () => setSearchTick(t => t + 1));
       }
       setLoadingPlayers(false);
     }, 400);
     return () => { if (searchTimer.current !== null) clearTimeout(searchTimer.current); };
-  }, [searchQuery, searchMode]);
+  }, [searchQuery, searchMode, searchTick]);
 
   const loadPlayers = useCallback(async (team: Team) => {
     setLoadingPlayers(true);
     setSelectedTeam(team);
     setView('players');
     setError(null);
+    setErrorRetry(null);
     setMinutesSeason(null);
     try {
       const roster = await fetchRoster(team.id);
@@ -183,7 +189,8 @@ export default function PlayerSelector({
       setPlayers(withMinutes.players);
       setMinutesSeason(withMinutes.season);
     } catch {
-      setError('Could not load roster. Please try again.');
+      setError(MSG.rosterFailed);
+      setErrorRetry(() => () => loadPlayers(team));
       setPlayers([]);
     }
     setLoadingPlayers(false);
@@ -542,8 +549,18 @@ export default function PlayerSelector({
                   style={{ color: 'var(--color-text-secondary)' }}>Loading…</div>
               )}
               {error && (
-                <div className="p-8 text-center font-mono text-xs uppercase tracking-widest"
-                  style={{ color: 'var(--neon-red)' }}>{error}</div>
+                <div className="p-8 text-center" role="alert">
+                  <p className="font-body text-sm" style={{ color: 'var(--color-text-primary)' }}>{error}</p>
+                  {errorRetry && (
+                    <button
+                      onClick={errorRetry}
+                      className="mt-3 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-xs"
+                      style={{ background: 'var(--neon-orange)', color: '#fff' }}
+                    >
+                      {MSG.tryAgain}
+                    </button>
+                  )}
+                </div>
               )}
               {searchMode && searchQuery.length < 2 && !loadingPlayers && (
                 <div className="p-8 text-center font-mono text-xs uppercase tracking-widest"

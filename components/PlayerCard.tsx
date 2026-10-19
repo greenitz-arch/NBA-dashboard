@@ -9,6 +9,7 @@ import { getPlayerHeadshotUrl, getEspnHeadshotUrl, hasNbaHeadshot } from '@/lib/
 import { useTutorial } from './TutorialGuide';
 import { STATUS_COLOR, STATUS_LABEL, type PlayerFantasy } from '@/lib/fantasy';
 import { FlameIcon, SnowflakeIcon } from './FantasyPanels';
+import { MSG } from '@/lib/messages';
 
 interface PlayerCardProps {
   player: WatchlistPlayer;
@@ -18,6 +19,12 @@ interface PlayerCardProps {
   fantasyOn?: boolean;
   fantasy?: PlayerFantasy | null;
   hideResult?: boolean; // "No spoilers": hide the W / L of the last game
+  failed?: boolean; // this player's stats could not be loaded
+  noGame?: boolean; // loaded fine, but the player has not played a game yet
+  severalFailed?: boolean; // many cards failed together: the page shows one banner instead
+  onRetry?: () => void;
+  onCompare?: () => void; // starts / cancels picking this player for a comparison
+  compareSelected?: boolean;
 }
 
 function StatPill({ stat }: { stat: DisplayStat }) {
@@ -40,16 +47,13 @@ function StatPill({ stat }: { stat: DisplayStat }) {
   );
 }
 
-function SkeletonCard() {
+// Shown in place of the numbers while stats load: the photo, name and team are already there.
+function StatsSkeleton() {
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
-      <div className="shimmer h-36 w-full" />
-      <div className="p-3 space-y-2">
-        <div className="shimmer h-4 w-28 rounded" />
-        <div className="shimmer h-3 w-16 rounded" />
-        <div className="flex gap-1.5 mt-3">
-          {[1,2,3].map(i => <div key={i} className="shimmer h-12 w-12 rounded-md" />)}
-        </div>
+    <div aria-busy="true" aria-label="Loading stats">
+      <div className="shimmer h-3 w-24 rounded mb-3" />
+      <div className="flex gap-1.5">
+        {[1, 2, 3].map(i => <div key={i} className="shimmer h-12 w-12 rounded-md" />)}
       </div>
     </div>
   );
@@ -68,14 +72,12 @@ function formatGameDate(dateStr: string): string {
   return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
 }
 
-export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null, hideResult = false }: PlayerCardProps) {
+export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null, hideResult = false, failed = false, noGame = false, severalFailed = false, onRetry, onCompare, compareSelected = false }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
   const [useEspnPhoto, setUseEspnPhoto] = useState(false);
   const [removing, setRemoving] = useState(false);
   const tutorial = useTutorial();
   const showRemoveHint = tutorial.showRemoveHint && tutorial.hintPlayerId === player.id;
-
-  if (loading) return <SkeletonCard />;
 
   const displayStats = stats ? getProminentStats(stats) : [];
   const hasNbaPhoto = hasNbaHeadshot(player);
@@ -227,10 +229,38 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
         )}
 
         {/* Stats */}
-        {displayStats.length > 0 ? (
+        {loading ? (
+          <StatsSkeleton />
+        ) : displayStats.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {displayStats.map(stat => <StatPill key={stat.key} stat={stat} />)}
           </div>
+        ) : failed ? (
+          severalFailed ? (
+            <p className="font-mono text-[9px] uppercase tracking-widest py-3 text-center"
+              style={{ color: 'var(--color-text-tertiary)' }}>
+              Stats unavailable
+            </p>
+          ) : (
+            <div className="py-2 text-center" role="alert">
+              <p className="font-body text-[11px] leading-snug" style={{ color: 'var(--color-text-secondary)' }}>
+                {MSG.playerStatsFailed(player.last_name)}
+              </p>
+              {onRetry && (
+                <button
+                  onClick={onRetry}
+                  className="mt-2 px-3 py-1 rounded-lg font-mono text-[9px] uppercase tracking-wider"
+                  style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                >
+                  {MSG.tryAgain}
+                </button>
+              )}
+            </div>
+          )
+        ) : noGame ? (
+          <p className="font-body text-[11px] leading-snug py-2 text-center" style={{ color: 'var(--color-text-secondary)' }}>
+            {MSG.notPlayedYet}
+          </p>
         ) : (
           <p className="font-mono text-[9px] uppercase tracking-widest py-3 text-center"
             style={{ color: 'var(--color-text-tertiary)' }}>
@@ -268,6 +298,24 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
               </span>
             )}
           </div>
+        )}
+
+        {/* Compare with another player */}
+        {onCompare && (
+          <button
+            onClick={onCompare}
+            aria-pressed={compareSelected}
+            className="w-full mt-2.5 py-1.5 rounded-lg font-mono text-[9px] uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors"
+            style={compareSelected
+              ? { background: 'var(--neon-orange)', border: '1px solid var(--neon-orange)', color: '#fff' }
+              : { border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+          >
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 4L3 8l4 4" /><path d="M3 8h14" /><path d="M17 20l4-4-4-4" /><path d="M21 16H7" />
+            </svg>
+            {compareSelected ? 'Selected' : 'Compare'}
+          </button>
         )}
       </div>
     </div>

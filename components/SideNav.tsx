@@ -9,6 +9,8 @@ import { NBA_TEAMS } from '@/lib/teams';
 import EditTeamNameModal from './EditTeamNameModal';
 import ConfirmDialog from './ConfirmDialog';
 import SuggestFeatureModal from './SuggestFeatureModal';
+import InstallGuide from './InstallGuide';
+import { useInstall, markNudgeDone } from '@/lib/useInstall';
 
 interface SideNavProps {
   open: boolean;
@@ -38,6 +40,14 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const { mode: installMode, install } = useInstall();
+
+  const handleInstall = async () => {
+    const result = await install();
+    if (result === 'guide') setGuideOpen(true);
+    else markNudgeDone();
+  };
 
   // Keyboard shortcut [ to toggle
   useEffect(() => {
@@ -381,6 +391,26 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
               </span>
             </button>
           </section>
+
+          {/* Quiet "Add to Home Screen" row: always available until the app is installed */}
+          {installMode !== 'installed' && (
+            <>
+              <div style={{ borderTop: '1px solid var(--color-border)' }} />
+              <button
+                onClick={handleInstall}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors"
+                style={{ color: 'var(--color-text-secondary)' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                  <path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" />
+                </svg>
+                <span className="font-body text-sm">Add to Home Screen</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* Footer shortcut hint */}
@@ -426,6 +456,7 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
       )}
 
       {suggestOpen && <SuggestFeatureModal onClose={() => setSuggestOpen(false)} />}
+      {guideOpen && <InstallGuide onClose={() => { markNudgeDone(); setGuideOpen(false); }} />}
     </>
   );
 }

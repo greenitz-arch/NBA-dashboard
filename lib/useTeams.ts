@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Player } from './nba';
 import { getTeamsData, setTeamsData } from './storage';
 import type { Team, TeamsFile, WatchlistPlayer } from './storage';
@@ -30,6 +30,8 @@ function persist(next: TeamsFile) {
 export function useTeams() {
   const [data, setData] = useState<TeamsFile>(EMPTY);
   const [hydrated, setHydrated] = useState(false);
+  const dataRef = useRef<TeamsFile>(EMPTY);
+  dataRef.current = data;
 
   useEffect(() => {
     let cancelled = false;
@@ -196,6 +198,58 @@ export function useTeams() {
     });
   }, []);
 
+
+  // Adds a team someone shared by link, as a SEPARATE team (the current team stays active
+  // unless there were no teams yet). Resolves { ok:false } when the device is out of space.
+  const importTeam = useCallback(async (
+    name: string,
+    players: WatchlistPlayer[]
+  ): Promise<{ ok: boolean; id: string; name: string; hadTeams: boolean }> => {
+    const prev = dataRef.current;
+    const used = new Set(prev.teams.map(t => t.name));
+    const base = name.trim().slice(0, 40) || 'Shared team';
+    let finalName = base;
+    for (let n = 2; used.has(finalName); n++) finalName = `${base.slice(0, 34)} (${n})`;
+    const now = Date.now();
+    const team: Team = {
+      id: makeTeamId(),
+      name: finalName,
+      players: players.slice(0, MAX_ROSTER).map(p => ({ ...p, added_at: now })),
+      createdAt: now,
+    };
+    const hadTeams = prev.teams.length > 0;
+    const next: TeamsFile = { teams: [...prev.teams, team], activeTeamId: prev.activeTeamId || team.id };
+    dataRef.current = next;
+    setData(next);
+    let saved = false;
+    try { saved = await setTeamsData(next); } catch { saved = false; }
+    let ok = true;
+    if (!saved) {
+      // The browser refused to write it. If the device really is out of space, take the team back
+      // out so nothing half-works. Otherwise (e.g. a private window that blocks saving) keep it for
+      // this visit, exactly like every other roster change does.
+      let lowSpace = false;
+      try {
+        const est = await navigator.storage?.estimate?.();
+        if (est?.quota && est.usage != null) lowSpace = est.usage / est.quota > 0.9;
+      } catch {
+        // can't tell: assume there is room
+      }
+      if (lowSpace) {
+        ok = false;
+        setData(cur => {
+          const rolled: TeamsFile = {
+            teams: cur.teams.filter(t => t.id !== team.id),
+            activeTeamId: cur.activeTeamId === team.id ? (cur.teams.find(t => t.id !== team.id)?.id ?? '') : cur.activeTeamId,
+          };
+          dataRef.current = rolled;
+          return rolled;
+        });
+      }
+    }
+    return { ok, id: team.id, name: finalName, hadTeams };
+  }, []);
+
   const isFull = watchlist.length >= MAX_ROSTER;
 
   return {
@@ -213,6 +267,7 @@ export function useTeams() {
     createTeam,
     renameTeam,
     deleteTeam,
+    importTeam,
     hydrated,
   };
 }

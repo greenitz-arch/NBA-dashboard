@@ -3,12 +3,15 @@
 import { useEffect } from 'react';
 
 // 1) Small print at the very bottom of every page.
-// 2) Counts the visit anonymously (once per browser session) using a random ID
-//    kept on the visitor's device. No names, emails or other personal details.
+// 2) Counts the visit anonymously using a random ID kept on the visitor's device.
+//    No names, emails or other personal details.
+//    A visit is counted once per browser session, and once more on each new day
+//    if the page/app was simply left open overnight (days are in Israel time,
+//    the same as the /hq page).
 
 const ID_KEY = 'courtside_vid';
-const SENT_KEY = 'courtside_visit_sent';   // sessionStorage: already counted this session
-const IGNORE_KEY = 'courtside_ignore';     // set on the owner's device by the /hq page
+const SENT_KEY = 'courtside_visit_sent';   // sessionStorage: the day (Israel time) this session was last counted
+const IGNORE_KEY = 'courtside_ignore';     // set on a device when the owner presses the button on /hq
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -16,28 +19,57 @@ function newId(): string {
   return `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 }
 
+// Same day format the server uses (Israel time), e.g. 2026-10-14.
+function todayKey(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+function countVisit() {
+  try {
+    if (window.location.pathname.startsWith('/hq')) return; // the owner's stats page isn't a visit
+    if (localStorage.getItem(IGNORE_KEY) === '1') return;   // a device the owner chose not to count
+
+    const today = todayKey();
+    if (sessionStorage.getItem(SENT_KEY) === today) return; // already counted for this session today
+
+    let id = localStorage.getItem(ID_KEY);
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      id = newId();
+      localStorage.setItem(ID_KEY, id);
+    }
+    sessionStorage.setItem(SENT_KEY, today);
+    fetch('/api/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+      keepalive: true,
+    })
+      .then(res => {
+        // If it wasn't saved, allow another try next time the page is shown.
+        if (!res.ok) { try { sessionStorage.removeItem(SENT_KEY); } catch { /* ignore */ } }
+      })
+      .catch(() => {
+        try { sessionStorage.removeItem(SENT_KEY); } catch { /* ignore */ }
+      });
+  } catch {
+    // Storage blocked (e.g. some private modes): skip counting, nothing breaks.
+  }
+}
+
 export default function SiteFooter() {
   useEffect(() => {
-    try {
-      if (window.location.pathname.startsWith('/hq')) return; // the owner's stats page isn't a visit
-      if (localStorage.getItem(IGNORE_KEY) === '1') return;   // owner's own device
-      if (sessionStorage.getItem(SENT_KEY)) return;           // already counted this session
-
-      let id = localStorage.getItem(ID_KEY);
-      if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
-        id = newId();
-        localStorage.setItem(ID_KEY, id);
-      }
-      sessionStorage.setItem(SENT_KEY, '1');
-      fetch('/api/visit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-        keepalive: true,
-      }).catch(() => { /* counting is best-effort */ });
-    } catch {
-      // Storage blocked (e.g. some private modes): skip counting, nothing breaks.
-    }
+    countVisit();
+    // Someone who leaves the page (or the installed app) open overnight and
+    // comes back the next day still counts as a visit on that new day.
+    const onShow = () => { if (document.visibilityState === 'visible') countVisit(); };
+    document.addEventListener('visibilitychange', onShow);
+    window.addEventListener('focus', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onShow);
+      window.removeEventListener('focus', onShow);
+    };
   }, []);
 
   return (

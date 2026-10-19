@@ -201,10 +201,22 @@ export default function PlayerSuggestions({ onAdd, revealAfterMs = 0 }: PlayerSu
 
   useEffect(() => {
     let cancelled = false;
-    loadTop100Players().then(all => {
-      if (!cancelled) setPicks(pickRandom(all, HOW_MANY));
-    });
-    return () => { cancelled = true; };
+    let retries = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // If ESPN doesn't answer the first time (nothing found), quietly try again a couple of times.
+    const attempt = () => {
+      loadTop100Players().then(all => {
+        if (cancelled) return;
+        if (all.length === 0 && retries < 2) {
+          retries++;
+          timer = setTimeout(attempt, 2500);
+          return;
+        }
+        setPicks(pickRandom(all, HOW_MANY));
+      });
+    };
+    attempt();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, []);
 
   useEffect(() => {

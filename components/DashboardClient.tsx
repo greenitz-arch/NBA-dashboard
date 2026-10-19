@@ -17,7 +17,13 @@ import { RosterStatusStrip, TeamStrengths, HotColdList } from './FantasyPanels';
 import ShareTeamModal from './ShareTeamModal';
 import HeadToHead from './HeadToHead';
 import { useFantasy } from '@/lib/useFantasy';
-import { fetchCardStats } from '@/lib/clientStats';
+import { fetchCardStatsDetailed } from '@/lib/clientStats';
+import { MSG } from '@/lib/messages';
+import InstallBanner from './InstallBanner';
+import InstallPill from './InstallPill';
+import NewsBell from './NewsBell';
+import PlayerComparison from './PlayerComparison';
+import PillButton, { BellIcon } from './PillButton';
 
 const POLL_INTERVAL = 10 * 60 * 1000;
 
@@ -122,13 +128,18 @@ function ScrollArrow({
 
 interface DashboardClientProps {
   teamsApi: UseTeamsReturn;
+  newsCount?: number; // unseen Player news items for the person's players
+  onOpenNews?: () => void;
 }
 
-export default function DashboardClient({ teamsApi }: DashboardClientProps) {
+export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }: DashboardClientProps) {
   const { teams, activeTeam, watchlist, addPlayer, removePlayer, restorePlayer, createRivalTeam, isWatching, isFull, switchTeam, createTeam, renameTeam, deleteTeam, hydrated } = teamsApi;
   const { prefs, updatePref } = usePreferences();
   const [stats, setStats] = useState<Record<number, GameStats>>({});
   const [loadingStats, setLoadingStats] = useState(false);
+  const [statsFailed, setStatsFailed] = useState<number[]>([]); // ESPN did not answer for these players
+  const [statsNone, setStatsNone] = useState<number[]>([]); // these players have not played yet
+  const [compareIds, setCompareIds] = useState<number[]>([]); // players picked for a comparison (max 2)
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorMode, setSelectorMode] = useState<'conference' | 'all-teams' | 'search'>('conference');
   const [showToast, setShowToast] = useState(false);
@@ -153,7 +164,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
   watchlistRef.current = watchlist;
 
   const fetchStats = useCallback(async (playerIds: number[], force = false) => {
-    if (playerIds.length === 0) { setStats({}); return; }
+    if (playerIds.length === 0) { setStats({}); setStatsFailed([]); setStatsNone([]); return; }
     if (!force && !shouldPoll()) return;
 
     const cacheKey = `stats_${[...playerIds].sort().join(',')}`;
@@ -161,8 +172,8 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
       try {
         const cached = sessionStorage.getItem(cacheKey);
         if (cached) {
-          const { data, ts } = JSON.parse(cached);
-          if (Date.now() - ts < POLL_INTERVAL) { setStats(data); return; }
+          const { data, none, ts } = JSON.parse(cached);
+          if (Date.now() - ts < POLL_INTERVAL) { setStats(data); setStatsNone(none ?? []); setStatsFailed([]); return; }
         }
       } catch {}
     }
@@ -172,18 +183,50 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
       // Stats now come from the visitor's browser (ESPN refuses the server).
       const byId = new Map(watchlistRef.current.map(p => [p.id, p]));
       const list = playerIds.map(id => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
-      const parsed: Record<number, GameStats> = await fetchCardStats(list);
+      const res = await fetchCardStatsDetailed(list);
       const ts = Date.now();
-      setStats(parsed);
-      // Only remember a successful answer, so a failed try is retried next time.
-      if (Object.keys(parsed).length > 0) {
-        sessionStorage.setItem(cacheKey, JSON.stringify({ data: parsed, ts }));
+      // A player whose refresh failed keeps the numbers already on screen.
+      setStats(prev => {
+        const next: Record<number, GameStats> = { ...res.stats };
+        for (const id of res.failed) if (prev[id]) next[id] = prev[id];
+        return next;
+      });
+      setStatsFailed(res.failed);
+      setStatsNone(res.none);
+      // Only remember a fully successful answer, so a failed try is retried next time.
+      if (res.failed.length === 0 && (Object.keys(res.stats).length > 0 || res.none.length > 0)) {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ data: res.stats, none: res.none, ts }));
       }
       sessionStorage.setItem('last_stats_fetch', String(ts));
       window.dispatchEvent(new Event('stats-updated'));
-    } catch {}
+    } catch {
+      setStatsFailed(playerIds);
+    }
     setLoadingStats(false);
   }, []);
+
+  const retryStats = useCallback(() => {
+    fetchStats(watchlistRef.current.map(p => p.id), true);
+  }, [fetchStats]);
+
+  // Tap Compare on one player, then on a second: the comparison opens. Tap again to un-pick.
+  const toggleCompare = useCallback((id: number) => {
+    setCompareIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : prev.length >= 2 ? [prev[1], id] : [...prev, id]));
+  }, []);
+  const comparePlayers = compareIds.length === 2
+    ? compareIds.map(id => watchlist.find(p => p.id === id)).filter((p): p is typeof watchlist[number] => !!p)
+    : [];
+
+  useEffect(() => {
+    setCompareIds(prev => {
+      const kept = prev.filter(id => watchlist.some(p => p.id === id));
+      return kept.length === prev.length ? prev : kept;
+    });
+  }, [watchlist]);
+
+  // Cards that still have nothing to show because their stats failed to load.
+  const failedNow = statsFailed.filter(id => !stats[id]);
+  const severalFailed = failedNow.length >= 3 && !loadingStats;
 
   useEffect(() => {
     if (!hydrated) return;
@@ -259,28 +302,45 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
       onCloseSelector={() => setSelectorOpen(false)}
     >
       <section className="max-w-[1100px] mx-auto px-6 pt-8 pb-4">
+        <InstallBanner />
 
-        {/* Fantasy mode switch */}
+
+        {/* Row of pills: Player news + Add to Home Screen on the left, the switches on the right */}
         {(hasPlayers || (fantasyOn && hasTeams)) && (
-          <div className="flex flex-wrap justify-end gap-2 mb-3">
-            {hasPlayers && (
-              <FantasyToggle
-                on={prefs.noSpoilers}
-                onChange={v => updatePref('noSpoilers', v)}
-                label="No spoilers"
-                icon="eye"
-              />
-            )}
-            {hasPlayers && (
-              <FantasyToggle on={fantasyOn} onChange={v => updatePref('fantasyMode', v)} beta />
-            )}
-            {fantasyOn && hasTeams && (
-              <FantasyToggle
-                on={prefs.h2hMode}
-                onChange={v => updatePref('h2hMode', v)}
-                label="Head to head matchup"
-              />
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {hasPlayers && onOpenNews && (
+                <PillButton
+                  label="Player news"
+                  onClick={onOpenNews}
+                  icon={<BellIcon size={16} />}
+                  badge={newsCount}
+                  highlight={newsCount > 0}
+                  ariaLabel={newsCount > 0 ? `Player news, ${newsCount} new` : 'Player news'}
+                />
+              )}
+              {hasPlayers && <InstallPill />}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 ml-auto">
+              {hasPlayers && (
+                <FantasyToggle
+                  on={prefs.noSpoilers}
+                  onChange={v => updatePref('noSpoilers', v)}
+                  label="No spoilers"
+                  icon="eye"
+                />
+              )}
+              {hasPlayers && (
+                <FantasyToggle on={fantasyOn} onChange={v => updatePref('fantasyMode', v)} beta />
+              )}
+              {fantasyOn && hasTeams && (
+                <FantasyToggle
+                  on={prefs.h2hMode}
+                  onChange={v => updatePref('h2hMode', v)}
+                  label="Head to head matchup"
+                />
+              )}
+            </div>
           </div>
         )}
 
@@ -402,6 +462,7 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
             onCreate={createTeam}
             onRename={renameTeam}
             onDelete={deleteTeam}
+            newsButton={onOpenNews ? <NewsBell count={newsCount} onClick={onOpenNews} /> : undefined}
             actions={
               hasPlayers ? (
                 <button
@@ -459,6 +520,24 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
         {/* Player grid */}
         {hasPlayers && !h2hOn && (
           <>
+            {severalFailed && (
+              <div
+                className="rounded-xl p-4 mb-3 flex items-center justify-between gap-3 flex-wrap"
+                style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+                role="alert"
+              >
+                <p className="font-body text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                  {MSG.severalStatsFailed}
+                </p>
+                <button
+                  onClick={retryStats}
+                  className="px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-xs"
+                  style={{ background: 'var(--neon-orange)', color: '#fff' }}
+                >
+                  {MSG.tryAgain}
+                </button>
+              </div>
+            )}
             <div ref={gridRef} className="grid grid-cols-3 lg:grid-cols-5 gap-3 mb-2">
               {sortedWatchlist.map((player, i) => (
                 <div
@@ -474,6 +553,12 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
                     fantasyOn={fantasyOn}
                     fantasy={fantasy.data[player.id] ?? null}
                     hideResult={prefs.noSpoilers}
+                    failed={failedNow.includes(player.id)}
+                    noGame={statsNone.includes(player.id)}
+                    severalFailed={severalFailed}
+                    onRetry={retryStats}
+                    onCompare={watchlist.length > 1 ? () => toggleCompare(player.id) : undefined}
+                    compareSelected={compareIds.includes(player.id)}
                   />
                 </div>
               ))}
@@ -503,6 +588,32 @@ export default function DashboardClient({ teamsApi }: DashboardClientProps) {
           fantasyOn={fantasyOn && fantasyReady}
           data={fantasy.data}
           onClose={() => setShareOpen(false)}
+        />
+      )}
+
+      {/* Player comparison: a hint bar after the first pick, the comparison after the second */}
+      {compareIds.length === 1 && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 bottom-5 z-40 flex items-center gap-3 rounded-full pl-4 pr-2 py-2 shadow-lg"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--neon-orange)' }}
+          role="status"
+        >
+          <span className="font-body text-sm" style={{ color: 'var(--color-text-primary)' }}>
+            Pick one more player to compare
+          </span>
+          <button
+            onClick={() => setCompareIds([])}
+            className="px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider"
+            style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {comparePlayers.length === 2 && (
+        <PlayerComparison
+          players={[comparePlayers[0], comparePlayers[1]]}
+          onClose={() => setCompareIds([])}
         />
       )}
 

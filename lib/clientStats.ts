@@ -95,24 +95,38 @@ export function lastGameFromGamelog(json: any, p: WatchlistPlayer): GameStats | 
   return null;
 }
 
-// Last-game stats for a list of players, keyed by player id.
-// Players whose game log cannot be loaded are simply left out.
-export async function fetchCardStats(players: WatchlistPlayer[]): Promise<Record<number, GameStats>> {
-  const result: Record<number, GameStats> = {};
+export interface CardStatsResult {
+  stats: Record<number, GameStats>;
+  failed: number[]; // ESPN did not answer (network, blocked, server error)
+  none: number[]; // ESPN answered, but the player has not played a game yet
+}
+
+// Last-game stats for a list of players, plus who failed to load and who simply has no game yet.
+export async function fetchCardStatsDetailed(players: WatchlistPlayer[]): Promise<CardStatsResult> {
+  const out: CardStatsResult = { stats: {}, failed: [], none: [] };
   for (let i = 0; i < players.length; i += 5) {
     const chunk = players.slice(i, i + 5);
     await Promise.all(
       chunk.map(async p => {
         try {
           const res = await fetch(GAMELOG_URL(p.id), { cache: 'no-store' });
-          if (!res.ok) return;
+          // No game log at all (404) is how ESPN answers for a player with no games yet.
+          if (res.status === 404) { out.none.push(p.id); return; }
+          if (!res.ok) { out.failed.push(p.id); return; }
           const stats = lastGameFromGamelog(await res.json(), p);
-          if (stats) result[p.id] = stats;
+          if (stats) out.stats[p.id] = stats;
+          else out.none.push(p.id);
         } catch {
-          // one player failing should not break the rest
+          out.failed.push(p.id);
         }
       })
     );
   }
-  return result;
+  return out;
+}
+
+// Last-game stats for a list of players, keyed by player id.
+// Players whose game log cannot be loaded are simply left out.
+export async function fetchCardStats(players: WatchlistPlayer[]): Promise<Record<number, GameStats>> {
+  return (await fetchCardStatsDetailed(players)).stats;
 }

@@ -14,9 +14,10 @@ interface TeamSwitcherProps {
   onRename: (teamId: string, name: string) => void;
   onDelete: (teamId: string) => void;
   actions?: React.ReactNode;
+  newsButton?: React.ReactNode; // the Player news bell, shown right next to the title
 }
 
-export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, onRename, onDelete, actions }: TeamSwitcherProps) {
+export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, onRename, onDelete, actions, newsButton }: TeamSwitcherProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -62,6 +63,7 @@ export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, on
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
+        {newsButton && <span className="ml-1.5 flex-shrink-0">{newsButton}</span>}
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
