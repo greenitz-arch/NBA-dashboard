@@ -8,7 +8,7 @@ interface SuggestFeatureModalProps {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Sends the suggestion via Netlify Forms — no server code and no API key.
-// Netlify reads form submissions posted to "/" (url-encoded, with a
+// Netlify reads form submissions posted to "/__forms.html" (url-encoded, with a
 // "form-name" field) and forwards them to whatever email address is set
 // in the site's Netlify dashboard under Site settings → Forms →
 // Form notifications. That's the one manual, one-time step needed for
@@ -54,7 +54,7 @@ export default function SuggestFeatureModal({ onClose }: SuggestFeatureModalProp
     setError('');
     setStatus('sending');
     try {
-      const res = await fetch('/', {
+      const res = await fetch('/__forms.html', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: encode({ 'form-name': FORM_NAME, idea: trimmed, email: email.trim() }),
