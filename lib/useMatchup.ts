@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WatchlistPlayer } from './storage';
 import type { InjuryIndex } from './fantasy';
 import { loadInjuries } from './useFantasy';
+import { fetchGamelog } from './gamelog';
 import {
   summarizeGames,
   fetchTeamGames,
@@ -13,8 +14,6 @@ import {
   type TeamGame,
 } from './matchup';
 
-const GAMELOG_URL = (id: number) =>
-  `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${id}/gamelog`;
 
 const GAMELOG_CACHE_MS = 5 * 60 * 1000;
 const LIVE_EVERY_MS = 30 * 1000; // while a roster player's game is in progress
@@ -57,7 +56,7 @@ async function loadGames(id: number): Promise<PlayerGames> {
   const cached = readCache(id);
   if (cached) return cached;
   try {
-    const res = await fetch(GAMELOG_URL(id), { cache: 'no-store' });
+    const res = await fetchGamelog(id, { cache: 'no-store' });
     if (!res.ok) throw new Error(`ESPN ${res.status}`);
     const data = summarizeGames(await res.json());
     writeCache(id, data);

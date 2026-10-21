@@ -7,9 +7,7 @@
 
 import type { GameStats } from './nba';
 import type { WatchlistPlayer } from './storage';
-
-const GAMELOG_URL = (id: number) =>
-  `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${id}/gamelog`;
+import { fetchGamelog } from './gamelog';
 
 const BASE_LABELS = ['MIN', 'FG', 'FG%', '3PT', '3P%', 'FT', 'FT%', 'REB', 'AST', 'BLK', 'STL', 'PF', 'TO', 'PTS'];
 
@@ -109,7 +107,7 @@ export async function fetchCardStatsDetailed(players: WatchlistPlayer[]): Promis
     await Promise.all(
       chunk.map(async p => {
         try {
-          const res = await fetch(GAMELOG_URL(p.id), { cache: 'no-store' });
+          const res = await fetchGamelog(p.id, { cache: 'no-store' });
           // No game log at all (404) is how ESPN answers for a player with no games yet.
           if (res.status === 404) { out.none.push(p.id); return; }
           if (!res.ok) { out.failed.push(p.id); return; }

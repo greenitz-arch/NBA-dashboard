@@ -18,6 +18,7 @@ import ShareTeamModal from './ShareTeamModal';
 import HeadToHead from './HeadToHead';
 import { useFantasy } from '@/lib/useFantasy';
 import { fetchCardStatsDetailed } from '@/lib/clientStats';
+import { fetchTeamGames } from '@/lib/matchup';
 import { MSG } from '@/lib/messages';
 import InstallBanner from './InstallBanner';
 import InstallPill from './InstallPill';
@@ -173,7 +174,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
         const cached = sessionStorage.getItem(cacheKey);
         if (cached) {
           const { data, none, ts } = JSON.parse(cached);
-          if (Date.now() - ts < POLL_INTERVAL) { setStats(data); setStatsNone(none ?? []); setStatsFailed([]); return; }
+          if (Date.now() - ts < POLL_INTERVAL - 60 * 1000) { setStats(data); setStatsNone(none ?? []); setStatsFailed([]); return; }
         }
       } catch {}
     }
@@ -241,6 +242,91 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
     };
     pollTimer.current = setTimeout(tick, POLL_INTERVAL);
     return () => { if (pollTimer.current) clearTimeout(pollTimer.current); };
+  }, [watchlist, hydrated, fetchStats]);
+
+  // Catch-up: when a player's team game is final but his card still shows an older game
+  // (or nothing yet), look at his game log again every 2 minutes until the new game shows up.
+  // ESPN adds a finished game to the game log a little after the final buzzer. Players who
+  // sat the game out never match, so each player gets a limited number of tries per game.
+  // Also runs right away when you come back to the tab.
+  const statsRef = useRef(stats);
+  statsRef.current = stats;
+  const catchUpTries = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!hydrated || watchlist.length === 0) return;
+    let cancelled = false;
+    let running = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const CHECK_EVERY = 2 * 60 * 1000;
+    const MAX_TRIES = 10;
+
+    const run = async () => {
+      if (timer) clearTimeout(timer);
+      if (!running && !document.hidden) {
+        running = true;
+        try {
+          const tg = await fetchTeamGames();
+          if (!cancelled && tg) {
+            const behind = watchlistRef.current.filter(p => {
+              const g = tg.get(p.team_id);
+              if (!g || g.state !== 'post') return false;
+              if (Date.now() - g.start > 16 * 60 * 60 * 1000) return false; // an old game
+              const mine = statsRef.current[p.id];
+              if (mine && mine.gameId === g.eventId) return false; // already up to date
+              return (catchUpTries.current.get(`${p.id}:${g.eventId}`) ?? 0) < MAX_TRIES;
+            });
+            if (behind.length > 0) {
+              for (const p of behind) {
+                const key = `${p.id}:${tg.get(p.team_id)!.eventId}`;
+                catchUpTries.current.set(key, (catchUpTries.current.get(key) ?? 0) + 1);
+              }
+              const res = await fetchCardStatsDetailed(behind);
+              if (!cancelled) {
+                const fresh: Record<number, GameStats> = {};
+                for (const id of Object.keys(res.stats).map(Number)) {
+                  if (res.stats[id].gameId !== statsRef.current[id]?.gameId) fresh[id] = res.stats[id];
+                }
+                const ids = Object.keys(fresh).map(Number);
+                if (ids.length > 0) {
+                  setStats(prev => ({ ...prev, ...fresh }));
+                  setStatsNone(prev => prev.filter(id => !fresh[id]));
+                  setStatsFailed(prev => prev.filter(id => !fresh[id]));
+                  // forget the saved copies so an old one is never shown again
+                  try {
+                    Object.keys(sessionStorage)
+                      .filter(k => k.startsWith('stats_'))
+                      .forEach(k => sessionStorage.removeItem(k));
+                    sessionStorage.setItem('last_stats_fetch', String(Date.now()));
+                  } catch {}
+                  window.dispatchEvent(new Event('stats-updated'));
+                }
+              }
+            }
+          }
+        } catch {}
+        running = false;
+      }
+      if (!cancelled) timer = setTimeout(run, CHECK_EVERY);
+    };
+
+    // First look shortly after the cards have loaded.
+    timer = setTimeout(run, 20 * 1000);
+
+    // Coming back to the tab: catch up now, and reload everything if it has been a while.
+    const onShow = () => {
+      if (document.hidden) return;
+      let last = 0;
+      try { last = Number(sessionStorage.getItem('last_stats_fetch') || 0); } catch {}
+      if (Date.now() - last > 5 * 60 * 1000) fetchStats(watchlistRef.current.map(p => p.id), true);
+      run();
+    };
+    document.addEventListener('visibilitychange', onShow);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onShow);
+    };
   }, [watchlist, hydrated, fetchStats]);
 
   const handleOpenSelector = useCallback((mode: 'conference' | 'all-teams' | 'search' = 'conference') => {

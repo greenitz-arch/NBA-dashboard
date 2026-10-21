@@ -1,5 +1,6 @@
 'use client';
 
+import { fetchGamelog } from './gamelog';
 import { useEffect, useMemo, useState } from 'react';
 import type { WatchlistPlayer } from './storage';
 import {
@@ -12,8 +13,6 @@ import {
   type PlayerFantasy,
 } from './fantasy';
 
-const ESPN_GAMELOG = (id: number) =>
-  `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${id}/gamelog`;
 const ESPN_INJURIES = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries';
 
 const CACHE_MS = 15 * 60 * 1000;
@@ -44,6 +43,12 @@ async function getJson(url: string) {
   return res.json();
 }
 
+async function getGamelogJson(id: number) {
+  const res = await fetchGamelog(id, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`ESPN ${res.status}`);
+  return res.json();
+}
+
 type InjurySaved = { ids: [string, InjuryEntry][]; names: [string, InjuryEntry][] };
 
 export async function loadInjuries(): Promise<InjuryIndex | null> {
@@ -65,7 +70,7 @@ async function loadSummary(id: number): Promise<GamelogSummary> {
   const cached = cacheGet<GamelogSummary>(key);
   if (cached) return cached;
   try {
-    const summary = summarizeGamelog(await getJson(ESPN_GAMELOG(id)));
+    const summary = summarizeGamelog(await getGamelogJson(id));
     cacheSet(key, summary);
     return summary;
   } catch {

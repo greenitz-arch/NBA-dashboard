@@ -6,11 +6,9 @@ import type { WatchlistPlayer } from '@/lib/storage';
 import { summarizeGames, type PlayerGames, type Line } from '@/lib/matchup';
 import { getPlayerHeadshotUrl, getEspnHeadshotUrl, hasNbaHeadshot } from '@/lib/nba';
 import { MSG } from '@/lib/messages';
+import { fetchGamelog } from '@/lib/gamelog';
 
 // Two players side by side, from their ESPN game logs (fetched in the visitor's browser).
-
-const GAMELOG_URL = (id: number) =>
-  `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${id}/gamelog`;
 
 type Loaded =
   | { status: 'loading' }
@@ -22,7 +20,7 @@ async function loadGames(p: WatchlistPlayer): Promise<Loaded> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
-    const res = await fetch(GAMELOG_URL(p.id), { cache: 'no-store', signal: ctrl.signal });
+    const res = await fetchGamelog(p.id, { cache: 'no-store', signal: ctrl.signal });
     if (res.status === 404) return { status: 'none' };
     if (!res.ok) return { status: 'error' };
     const games = summarizeGames(await res.json());
