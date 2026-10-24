@@ -25,6 +25,8 @@ import InstallPill from './InstallPill';
 import NewsBell from './NewsBell';
 import PlayerComparison from './PlayerComparison';
 import PillButton, { BellIcon } from './PillButton';
+import RookieWatchPill from './RookieWatchPill';
+import RookieWatchView from './RookieWatchView';
 
 const POLL_INTERVAL = 10 * 60 * 1000;
 
@@ -146,6 +148,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
   const [showToast, setShowToast] = useState(false);
   const [showTeamFullSuggestion, setShowTeamFullSuggestion] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [rookieOpen, setRookieOpen] = useState(false); // Rookie Watch screen
   // Which team the player picker is adding to: your own team, or the head-to-head rival.
   const [selectorTarget, setSelectorTarget] = useState<'mine' | 'rival'>('mine');
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -359,6 +362,16 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
   const hasTeams = teams.length > 0;
   const hasPlayers = watchlist.length > 0;
 
+  // Rookie Watch is its own screen: while it is open it replaces the roster (and the pill only exists once the team has a player).
+  const rookieShown = rookieOpen && hasPlayers;
+  useEffect(() => {
+    if (rookieOpen && !hasPlayers) setRookieOpen(false);
+  }, [rookieOpen, hasPlayers]);
+  const closeRookieWatch = useCallback(() => {
+    setRookieOpen(false);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
+  }, []);
+
   const handleCreateTeamFromToast = useCallback(() => {
     createTeam();
     setShowToast(false);
@@ -387,14 +400,14 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
       onOpenSelector={() => { setSelectorTarget('mine'); setSelectorMode('conference'); setSelectorOpen(true); }}
       onCloseSelector={() => setSelectorOpen(false)}
     >
-      <section className="max-w-[1100px] mx-auto px-6 pt-8 pb-4">
+      <section className="max-w-[1100px] mx-auto px-6 pt-3 sm:pt-8 pb-4">
         <InstallBanner />
 
 
         {/* Row of pills: Player news + Add to Home Screen on the left, the switches on the right */}
         {(hasPlayers || (fantasyOn && hasTeams)) && (
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mp-pills flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="mp-group flex flex-wrap items-center gap-2">
               {hasPlayers && onOpenNews && (
                 <PillButton
                   label="Player news"
@@ -407,7 +420,15 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
               )}
               {hasPlayers && <InstallPill />}
             </div>
-            <div className="flex flex-wrap justify-end gap-2 ml-auto">
+            {hasPlayers && (
+              <div className="mp-group flex flex-wrap items-center gap-2 ml-auto">
+                <RookieWatchPill
+                  open={rookieShown}
+                  onClick={() => (rookieShown ? closeRookieWatch() : setRookieOpen(true))}
+                />
+              </div>
+            )}
+            <div className="mp-group flex flex-wrap justify-end gap-2 ml-auto">
               {hasPlayers && (
                 <FantasyToggle
                   on={prefs.noSpoilers}
@@ -431,7 +452,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
         )}
 
         {/* Beta notice, visible whenever fantasy mode is on */}
-        {fantasyOn && (
+        {fantasyOn && !rookieShown && (
           <p
             className="flex items-center justify-end gap-2 font-body text-xs mb-3 text-right"
             style={{ color: 'var(--color-text-secondary)' }}
@@ -446,19 +467,32 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
           </p>
         )}
 
+        {rookieShown && (
+          <RookieWatchView
+            rosterIds={watchlist.map(p => p.id)}
+            onAdd={handleAddPlayer}
+            onExit={closeRookieWatch}
+            noSpoilers={prefs.noSpoilers}
+          />
+        )}
+
+        {!rookieShown && (
+        <>
+        {/* Hero + progress bar share one wrapper so phones can put "Add players" and the progress bar on one row. */}
+        <div className="mp-top">
         {/* Hero */}
-        <div className={`mb-4 ${hasTeams ? 'text-center' : ''}`}>
+        <div className={`mp-hero mb-4 ${hasTeams ? 'text-center' : ''}`}>
           {hasTeams ? (
             hasPlayers ? (
               <>
                 <h1
-                  className="font-display font-800 text-3xl uppercase tracking-wide leading-tight"
+                  className="mp-title font-display font-800 text-3xl uppercase tracking-wide leading-tight"
                   style={{ color: 'var(--color-text-primary)' }}
                 >
                   Welcome to your courtside seats
                 </h1>
                 <p
-                  className="font-body mt-3 leading-snug"
+                  className="mp-sub font-body mt-3 leading-snug"
                   style={{ color: 'var(--color-text-secondary)', fontSize: '1.05rem' }}
                 >
                   Ready to expand your roster?<br />
@@ -467,7 +501,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
                 <button
                   onClick={() => handleOpenSelector('conference')}
                   aria-label="Add more players to your roster"
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
+                  className="mp-add mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-display font-600 uppercase tracking-wider text-sm transition-all duration-200 hover:scale-105"
                   style={{ background: '#000000', color: 'white', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
@@ -515,7 +549,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
 
         {/* Progress bar */}
         {hasPlayers && (
-          <div className="flex items-center gap-3 mb-6">
+          <div className="mp-progress flex items-center gap-3 mb-6">
             <div className="flex-1 h-1.5 rounded-full overflow-hidden"
               style={{ background: 'var(--color-progress-bg)' }}>
               <div
@@ -538,6 +572,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
             </span>
           </div>
         )}
+        </div>
 
         {/* Team title + switcher — only once a team exists (created on first player add) */}
         {hasTeams && activeTeam && (
@@ -553,7 +588,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
               hasPlayers ? (
                 <button
                   onClick={() => setShareOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-xs transition-all duration-200 hover:scale-105"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-[11px] sm:text-xs whitespace-nowrap transition-all duration-200 hover:scale-105"
                   style={{
                     border: '1px solid var(--skin-primary)',
                     color: 'var(--color-text-primary)',
@@ -565,7 +600,7 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
                     <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
                     <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
                   </svg>
-                  Share my team
+                  <span className="sm:hidden">Share</span><span className="hidden sm:inline">Share my team</span>
                 </button>
               ) : undefined
             }
@@ -664,7 +699,12 @@ export default function DashboardClient({ teamsApi, newsCount = 0, onOpenNews }:
           onOpenSelector={handleOpenSelector}
           hasPlayers={hasPlayers}
           onAddPlayer={handleAddPlayer}
+          rosterIds={watchlist.map(p => p.id)}
+          isFull={isFull}
+          noSpoilers={prefs.noSpoilers}
         />
+        </>
+        )}
       </section>
 
       {shareOpen && activeTeam && (

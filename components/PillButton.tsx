@@ -8,15 +8,16 @@ interface PillButtonProps {
   badge?: number; // small orange number, e.g. unseen news
   highlight?: boolean; // orange outline
   ariaLabel?: string;
+  className?: string;
 }
 
-export default function PillButton({ label, onClick, icon, badge = 0, highlight = false, ariaLabel }: PillButtonProps) {
+export default function PillButton({ label, onClick, icon, badge = 0, highlight = false, ariaLabel, className = '' }: PillButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={ariaLabel ?? label}
-      className="inline-flex items-center gap-2.5 rounded-full pl-3.5 pr-3.5 py-2.5 transition-transform duration-200 hover:scale-[1.03]"
+      className={`inline-flex items-center gap-2.5 rounded-full pl-3.5 pr-3.5 py-2.5 transition-transform duration-200 hover:scale-[1.03] ${className}`}
       style={{
         background: 'var(--color-card)',
         border: `1px solid ${highlight ? 'var(--skin-primary)' : 'var(--color-border)'}`,

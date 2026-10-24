@@ -40,12 +40,12 @@ export default function Header({ onOpenNav }: HeaderProps) {
       }}
     >
       {/* h-24 = 96px — used as offset for SideNav and backdrop */}
-      <div className="max-w-[1100px] mx-auto px-6 h-24 flex items-center justify-between gap-4">
+      <div className="max-w-[1100px] mx-auto px-6 h-[var(--header-h)] flex items-center justify-between gap-4">
 
         {/* Left — hamburger */}
         <button
           onClick={onOpenNav}
-          className="w-10 h-10 flex flex-col items-center justify-center gap-1.5 rounded-xl transition-colors flex-shrink-0"
+          className="w-9 h-9 sm:w-10 sm:h-10 flex flex-col items-center justify-center gap-1.5 rounded-xl transition-colors flex-shrink-0"
           style={{ border: '1px solid var(--color-border)' }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-hover)'}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
@@ -58,19 +58,19 @@ export default function Header({ onOpenNav }: HeaderProps) {
         </button>
 
         {/* Centre — logo, larger */}
-        <div className="flex items-center gap-4 flex-1 justify-center sm:justify-start">
+        <div className="flex items-center gap-2.5 sm:gap-4 flex-1 justify-center sm:justify-start">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+            className="w-8 h-8 sm:w-12 sm:h-12 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, var(--skin-primary) 0%, var(--skin-secondary) 100%)', boxShadow: 'var(--skin-glow)' }}
           >
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="white">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="white" className="w-[17px] h-[17px] sm:w-[26px] sm:h-[26px]">
               <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 1.5a8.5 8.5 0 0 1 8.5 8.5 8.5 8.5 0 0 1-8.5 8.5A8.5 8.5 0 0 1 3.5 12 8.5 8.5 0 0 1 12 3.5zm0 1a7.5 7.5 0 0 0-5.74 2.69C7.5 7.9 9.67 8.5 12 8.5s4.5-.6 5.74-1.31A7.5 7.5 0 0 0 12 4.5zm5.94 3.61C16.6 9.04 14.4 9.75 12 9.75S7.4 9.04 6.06 8.11A7.47 7.47 0 0 0 4.5 12c0 .87.15 1.7.42 2.48C6.3 13.56 9 13 12 13s5.7.56 7.08 1.48c.27-.78.42-1.61.42-2.48a7.47 7.47 0 0 0-1.56-3.89zM12 14.25c-2.9 0-5.5.58-6.83 1.46A7.49 7.49 0 0 0 12 19.5a7.49 7.49 0 0 0 6.83-3.79C17.5 14.83 14.9 14.25 12 14.25z"/>
             </svg>
           </div>
           <div>
             <div
-              className="font-display font-800 uppercase tracking-wider leading-none"
-              style={{ fontSize: '1.75rem', color: 'var(--color-text-primary)' }}
+              className="font-display font-800 uppercase tracking-wider leading-none text-[1.25rem] sm:text-[1.75rem]"
+              style={{ color: 'var(--color-text-primary)' }}
             >
               Courtside
             </div>

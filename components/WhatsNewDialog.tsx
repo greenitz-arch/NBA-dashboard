@@ -8,26 +8,23 @@ const Icon = ({ children }: { children: React.ReactNode }) => (
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 );
 
-const ITEMS: { title: string; text: string; icon: React.ReactNode }[] = [
+const ITEMS: { title: string; text: string; icon: React.ReactNode; beta?: boolean }[] = [
   {
-    title: 'Share your team',
-    text: 'Copy a link from the Share window. Friends can add your team to their own Courtside as a separate team.',
-    icon: <Icon><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></Icon>,
+    title: 'Rookie Watch',
+    beta: true,
+    text: 'Meet the next stars. Tap the orange Rookie Watch pill to see last night’s best rookies, or the top 15 of the season so far. Add any of them to your team in one tap.',
+    icon: <Icon><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6.1L12 16.6 6.6 19.6l1.2-6.1L3.3 9.3l6.1-.7L12 3z" /></Icon>,
   },
   {
-    title: 'Compare players',
-    text: 'Tap Compare on two players to see their stats side by side.',
-    icon: <Icon><path d="M7 4L3 8l4 4" /><path d="M3 8h14" /><path d="M17 20l4-4-4-4" /><path d="M21 16H7" /></Icon>,
+    title: 'Smart Stats',
+    beta: true,
+    text: 'Spot last night’s breakout performances. Find it under Roster Building Tools, then add the standouts to your team.',
+    icon: <Icon><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" /></Icon>,
   },
   {
-    title: 'Player news',
-    text: 'Injuries, returns and roster moves for your players from the last 36 hours. Tap the bell or the Player news pill.',
-    icon: <Icon><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Icon>,
-  },
-  {
-    title: 'Add to Home Screen',
-    text: 'Put Courtside on your phone like an app, one tap away. Look for the Add to Home Screen pill.',
-    icon: <Icon><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></Icon>,
+    title: 'Easier on your phone',
+    text: 'The top of the page is more compact, so your players show up higher without scrolling.',
+    icon: <Icon><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></Icon>,
   },
 ];
 
@@ -96,8 +93,16 @@ export default function WhatsNewDialog({ hydrated, hasTeams }: { hydrated: boole
                 {item.icon}
               </span>
               <div>
-                <p className="font-display font-700 text-sm uppercase tracking-wide" style={{ color: 'var(--color-text-primary)' }}>
+                <p className="flex items-center gap-2 font-display font-700 text-sm uppercase tracking-wide" style={{ color: 'var(--color-text-primary)' }}>
                   {item.title}
+                  {item.beta && (
+                    <span
+                      className="font-mono text-[9px] uppercase tracking-widest rounded-full px-1.5 py-0.5"
+                      style={{ background: 'rgba(var(--skin-primary-rgb),0.2)', color: 'var(--color-text-primary)' }}
+                    >
+                      Beta
+                    </span>
+                  )}
                 </p>
                 <p className="font-body text-xs leading-snug mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
                   {item.text}
@@ -108,7 +113,7 @@ export default function WhatsNewDialog({ hydrated, hasTeams }: { hydrated: boole
         </div>
 
         <p className="font-body text-xs mt-1 mb-4" style={{ color: 'var(--color-text-tertiary)' }}>
-          Plus smoother loading and friendlier error messages.
+          Plus a few small fixes behind the scenes.
         </p>
 
         <button

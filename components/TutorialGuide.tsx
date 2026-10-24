@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 // ─────────────────────────────────────────────────────────────────────────
 // First-time tutorial ("Not sure how it works? »")
 //
-// This is a guided, 6-step walkthrough that runs *on top of* the real
+// This is a welcome screen followed by a guided, 6-step walkthrough that runs *on top of* the real
 // PlayerSelector dialog — it does not re-implement the conference/team/
 // roster screens. It only renders:
 //   1) a small floating tip card (with copy + Back/Next/dots), and
@@ -16,14 +16,21 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 // options to dim, and calls setTarget(...) so this component knows where
 // to draw the ring. The worked example is always East → Boston Celtics →
 // Jayson Tatum, confirmed in the storyboard/mockup phase.
+//
+// The welcome screen ("Welcome to Courtside") is NOT one of the numbered
+// steps: it is a separate `welcomeOpen` flag, so step numbers 1-6 (which
+// PlayerSelector and others depend on) stay exactly as they were. It only
+// opens when the visitor clicks the tour pill, never by itself.
 // ─────────────────────────────────────────────────────────────────────────
 
 interface TutorialContextValue {
   step: number; // 0 = inactive, 1-6 = active steps
+  welcomeOpen: boolean; // the "Welcome to Courtside" screen before step 1
   picked: { east: boolean; bos: boolean };
   showRemoveHint: boolean;
   hintPlayerId: number | null;
   start: () => void;
+  beginSteps: () => void;
   skip: () => void;
   closeAll: () => void;
   toStep2: () => void;
@@ -45,10 +52,11 @@ interface TutorialContextValue {
 const noop = () => {};
 const TutorialContext = createContext<TutorialContextValue>({
   step: 0,
+  welcomeOpen: false,
   picked: { east: false, bos: false },
   showRemoveHint: false,
   hintPlayerId: null,
-  start: noop, skip: noop, closeAll: noop,
+  start: noop, beginSteps: noop, skip: noop, closeAll: noop,
   toStep2: noop, backToStep1: noop, pickEast: noop,
   toStep3: noop, backToStep2: noop, pickBos: noop,
   toStep4: noop, backToStep3: noop,
@@ -68,6 +76,7 @@ export function TutorialProvider({
   children: React.ReactNode;
 }) {
   const [step, setStep] = useState(0);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [picked, setPicked] = useState({ east: false, bos: false });
   const [showRemoveHint, setShowRemoveHint] = useState(false);
   const [hintPlayerId, setHintPlayerId] = useState<number | null>(null);
@@ -78,8 +87,10 @@ export function TutorialProvider({
     targets.current[key] = el;
   }, []);
 
-  const start = useCallback(() => { setStep(1); }, []);
-  const skip = useCallback(() => { onCloseSelector(); setStep(0); setPicked({ east: false, bos: false }); }, [onCloseSelector]);
+  // Clicking the tour pill opens the welcome screen first; its button moves on to step 1.
+  const start = useCallback(() => { setWelcomeOpen(true); }, []);
+  const beginSteps = useCallback(() => { setWelcomeOpen(false); setStep(1); }, []);
+  const skip = useCallback(() => { onCloseSelector(); setWelcomeOpen(false); setStep(0); setPicked({ east: false, bos: false }); }, [onCloseSelector]);
   const closeAll = skip;
 
   const toStep2 = useCallback(() => { onOpenSelector(); setStep(2); }, [onOpenSelector]);
@@ -106,6 +117,7 @@ export function TutorialProvider({
 
   const finish = useCallback(() => {
     onCloseSelector();
+    setWelcomeOpen(false);
     setStep(0);
     setPicked({ east: false, bos: false });
     setShowRemoveHint(true);
@@ -117,8 +129,8 @@ export function TutorialProvider({
 
   return (
     <TutorialContext.Provider value={{
-      step, picked, showRemoveHint, hintPlayerId,
-      start, skip, closeAll,
+      step, welcomeOpen, picked, showRemoveHint, hintPlayerId,
+      start, beginSteps, skip, closeAll,
       toStep2, backToStep1, pickEast,
       toStep3, backToStep2, pickBos,
       toStep4, backToStep3,
@@ -131,10 +143,12 @@ export function TutorialProvider({
   );
 }
 
-function dots(active: number) {
+// 7 dots: the welcome screen is dot 1 (pass 0), tour steps 1-6 are dots 2-7.
+function dots(step: number) {
+  const active = step + 1;
   return (
-    <div className="flex items-center gap-1.5">
-      {[1, 2, 3, 4, 5, 6].map(n => (
+    <div className="flex items-center gap-1.5" aria-label={`Tour screen ${active} of 7`}>
+      {[1, 2, 3, 4, 5, 6, 7].map(n => (
         <span key={n} className="rounded-full" style={{
           width: 6, height: 6,
           background: n === active ? 'var(--neon-orange)' : 'var(--color-border)',
@@ -213,6 +227,51 @@ function TutorialOverlay({ targets }: { targets: React.MutableRefObject<Record<s
     window.addEventListener('resize', reposition);
     return () => { clearInterval(id); window.removeEventListener('resize', reposition); };
   }, [t.step, reposition]);
+
+  if (t.step === 0 && t.welcomeOpen) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center p-3"
+        style={{ background: 'rgba(0,0,0,0.6)' }}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Welcome to Courtside"
+          className="rounded-2xl p-5 text-center"
+          style={{
+            width: 380, maxWidth: 'calc(100vw - 24px)',
+            background: 'var(--color-card)', border: '1px solid var(--color-border)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+          }}
+        >
+          <div className="flex justify-end -mb-1">
+            <button onClick={t.skip} aria-label="Close tutorial" style={{ color: 'var(--color-text-secondary)' }}>✕</button>
+          </div>
+          <h2
+            className="font-display font-800 text-3xl uppercase tracking-wide leading-tight mb-3"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            Welcome to Courtside
+          </h2>
+          <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'var(--color-text-primary)' }}>
+            Build a roster of your favorite NBA players and see how they played last night. Stats, news, head-to-heads and a shareable team photo, all in one place.
+          </p>
+          <div className="flex justify-center mb-4">{dots(0)}</div>
+          <button
+            onClick={t.beginSteps}
+            className="font-mono text-xs px-4 py-2 rounded-lg font-600"
+            style={{ background: 'var(--neon-orange)', color: '#fff' }}
+          >
+            Show me how it works →
+          </button>
+          <div className="mt-3">
+            <button onClick={t.skip} className="font-mono text-xs" style={{ color: 'var(--color-text-secondary)' }}>Skip tour</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (t.step === 0) return null;
 

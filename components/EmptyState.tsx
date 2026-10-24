@@ -5,12 +5,17 @@ import { useTutorial } from './TutorialGuide';
 import MrLineaAnimation, { MR_LINEA_DURATION_MS } from './MrLineaAnimation';
 import PlayerSuggestions from './PlayerSuggestions';
 import SuggestFeatureModal from './SuggestFeatureModal';
+import SmartStatsModal from './SmartStatsModal';
+import ConfirmDialog from './ConfirmDialog';
 import type { Player } from '@/lib/nba';
 
 interface EmptyStateProps {
   onOpenSelector: (mode?: 'conference' | 'all-teams' | 'search') => void;
   hasPlayers: boolean;
   onAddPlayer?: (player: Player) => void;
+  rosterIds?: number[]; // players already on the team being viewed (Smart Stats leaves them out)
+  isFull?: boolean;     // that team already has 15 players
+  noSpoilers?: boolean; // "No spoilers" mode is on
 }
 
 // The "First time here?" nudge bubble: shows once per page load, only on the
@@ -25,6 +30,7 @@ const tips = [
     desc: 'Find your favorite players by team',
     mode: 'all-teams' as 'all-teams' | 'search' | undefined,
     disabled: false,
+    beta: false,
     icon: (
       <svg viewBox="0 0 24 24" width="26" height="26" fill="none"
         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -40,6 +46,7 @@ const tips = [
     desc: 'Search any player by name instantly',
     mode: 'search' as const,
     disabled: false,
+    beta: false,
     icon: (
       <svg viewBox="0 0 24 24" width="26" height="26" fill="none"
         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -53,7 +60,8 @@ const tips = [
     title: 'Smart Stats',
     desc: 'Standout performances from last game night',
     mode: undefined,
-    disabled: true,
+    disabled: false,
+    beta: true,
     icon: (
       <svg viewBox="0 0 24 24" width="26" height="26" fill="none"
         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -63,10 +71,11 @@ const tips = [
   },
 ];
 
-export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: EmptyStateProps) {
+export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer, rosterIds = [], isFull = false, noSpoilers = false }: EmptyStateProps) {
   const tutorial = useTutorial();
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
+  const [smartStage, setSmartStage] = useState<'closed' | 'confirm' | 'open'>('closed');
   const nudgeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -180,7 +189,14 @@ export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: 
           {tips.map(tip => (
             <button
               key={tip.id}
-              onClick={() => !tip.disabled && onOpenSelector(tip.mode)}
+              onClick={() => {
+                if (tip.disabled) return;
+                if (tip.id === 'smart') {
+                  if (onAddPlayer) setSmartStage(noSpoilers ? 'confirm' : 'open');
+                  return;
+                }
+                onOpenSelector(tip.mode);
+              }}
               disabled={tip.disabled}
               aria-label={tip.disabled ? `${tip.title} — coming soon` : tip.title}
               className="rounded-xl p-5 text-center transition-all duration-200 relative"
@@ -205,12 +221,12 @@ export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: 
                 }
               }}
             >
-              {tip.disabled && (
+              {tip.beta && (
                 <span
-                  className="absolute top-2 right-2 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded"
-                  style={{ background: 'var(--color-muted)', color: 'var(--color-text-secondary)' }}
+                  className="absolute top-2 right-2 font-mono text-[9px] uppercase tracking-widest rounded-full px-1.5 py-0.5"
+                  style={{ background: 'rgba(var(--skin-primary-rgb),0.2)', color: 'var(--color-text-primary)' }}
                 >
-                  Soon
+                  Beta
                 </span>
               )}
               <div
@@ -253,6 +269,26 @@ export default function EmptyState({ onOpenSelector, hasPlayers, onAddPlayer }: 
       </div>
 
       {suggestOpen && <SuggestFeatureModal onClose={() => setSuggestOpen(false)} />}
+
+      {smartStage === 'confirm' && (
+        <ConfirmDialog
+          title="Your No Spoilers mode is on"
+          body="If you proceed, this might spoil your last gameday results."
+          primaryLabel="Proceed"
+          secondaryLabel="Go back"
+          onPrimary={() => setSmartStage('open')}
+          onSecondary={() => setSmartStage('closed')}
+        />
+      )}
+      {smartStage === 'open' && onAddPlayer && (
+        <SmartStatsModal
+          rosterIds={rosterIds}
+          isFull={isFull}
+          noSpoilers={noSpoilers}
+          onAddPlayer={onAddPlayer}
+          onClose={() => setSmartStage('closed')}
+        />
+      )}
 
       {/* Entrance animation — plays once per page load while the roster is
           empty (no loop, no "seen it" memory). */}

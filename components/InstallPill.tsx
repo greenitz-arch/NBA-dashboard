@@ -24,6 +24,7 @@ export default function InstallPill() {
     <>
       <PillButton
         label="Add to Home Screen"
+        className="install-pill"
         onClick={onClick}
         highlight
         icon={

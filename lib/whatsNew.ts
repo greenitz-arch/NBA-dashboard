@@ -2,7 +2,7 @@
 // "What's New" pop-up: shown once to people who already used Courtside, never to first-time visitors.
 // Change WHATS_NEW_VERSION the next time you want everyone to see a fresh announcement.
 
-export const WHATS_NEW_VERSION = 'oct-2026';
+export const WHATS_NEW_VERSION = 'oct-2026-b';
 const SEEN_KEY = 'courtside_whats_new_seen';
 
 // Worked out once, when the page loads (before this visit creates its own visitor id).

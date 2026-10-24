@@ -70,7 +70,7 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
       {open && (
         <div
           className="fixed left-0 right-0 bottom-0 z-40"
-          style={{ top: '96px', background: 'var(--color-overlay)' }}
+          style={{ top: 'var(--header-h)', background: 'var(--color-overlay)' }}
           onClick={onClose}
         />
       )}
@@ -79,8 +79,8 @@ export default function SideNav({ open, onClose, teamsApi }: SideNavProps) {
       <div
         className="fixed left-0 z-50 flex flex-col"
         style={{
-          top: '96px',
-          height: 'calc(100vh - 96px)',
+          top: 'var(--header-h)',
+          height: 'calc(100vh - var(--header-h))',
           width: '280px',
           background: 'var(--color-sidenav-bg)',
           borderRight: '1px solid var(--color-border)',

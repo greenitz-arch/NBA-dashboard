@@ -38,10 +38,10 @@ export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, on
   }, [dropdownOpen]);
 
   return (
-    <div ref={wrapRef} className="relative flex flex-col items-center mb-5">
-      <div className="flex items-center gap-1.5">
+    <div ref={wrapRef} className="relative flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-2 mb-3 sm:mb-5">
+      <div className="flex items-center gap-1.5 min-w-0">
         <h2
-          className="font-display font-800 text-xl sm:text-2xl uppercase tracking-wide leading-tight"
+          className="font-display font-800 text-xl sm:text-2xl uppercase tracking-wide leading-tight truncate"
           style={{ color: 'var(--color-text-primary)' }}
         >
           {activeTeam.name}
@@ -66,11 +66,11 @@ export default function TeamSwitcher({ teams, activeTeam, onSwitch, onCreate, on
         {newsButton && <span className="ml-1.5 flex-shrink-0">{newsButton}</span>}
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
+      <div className="mt-0 sm:mt-2.5 flex flex-nowrap sm:flex-wrap items-center justify-center gap-1.5 sm:gap-2 flex-shrink-0">
       {/* Prominent Edit Title button */}
       <button
         onClick={() => setEditOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-xs transition-all duration-200 hover:scale-105"
+        className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full font-display font-600 uppercase tracking-wider text-[11px] sm:text-xs whitespace-nowrap transition-all duration-200 hover:scale-105"
         style={{
           border: '1px solid var(--color-border)',
           color: 'var(--color-text-secondary)',

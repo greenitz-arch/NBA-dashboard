@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import type { GameStats } from '@/lib/nba';
 import type { WatchlistPlayer } from '@/lib/storage';
-import { getProminentStats, type DisplayStat } from '@/lib/prominence';
+import { getProminentStats, heroDisplayStats, type DisplayStat, type HeroKey } from '@/lib/prominence';
 import { getPlayerHeadshotUrl, getEspnHeadshotUrl, hasNbaHeadshot } from '@/lib/nba';
 import { useTutorial } from './TutorialGuide';
 import { STATUS_COLOR, STATUS_LABEL, type PlayerFantasy } from '@/lib/fantasy';
@@ -25,9 +25,12 @@ interface PlayerCardProps {
   onRetry?: () => void;
   onCompare?: () => void; // starts / cancels picking this player for a comparison
   compareSelected?: boolean;
+  hideRemove?: boolean; // Smart Stats tiles: no remove button
+  heroKey?: HeroKey; // Smart Stats tiles: which stat is the big highlighted one
+  footer?: ReactNode; // Smart Stats tiles: the "Add to Roster" button goes here
 }
 
-function StatPill({ stat }: { stat: DisplayStat }) {
+function StatPill({ stat, extra = false }: { stat: DisplayStat; extra?: boolean }) {
   const cls =
     stat.isNegative ? 'stat-negative' :
     stat.prominence === 'hero' ? 'stat-hero' :
@@ -35,10 +38,13 @@ function StatPill({ stat }: { stat: DisplayStat }) {
     'stat-standard';
 
   return (
-    <div className={`${cls} rounded-md px-2.5 py-1.5 flex flex-col items-center gap-0.5 min-w-[48px]`}>
+    <div className={`${cls} pc-pill${extra ? ' pc-extra' : ''} rounded-md px-2.5 py-1.5 flex flex-col items-center gap-0.5 min-w-[48px]`}>
       <span
         className="font-display font-700 leading-none"
-        style={{ fontSize: stat.prominence === 'hero' ? '1.5rem' : stat.prominence === 'highlight' ? '1.15rem' : '0.95rem' }}
+        style={{
+          fontSize: stat.prominence === 'hero' ? '1.5rem' : stat.prominence === 'highlight' ? '1.15rem' : '0.95rem',
+          ['--vn' as string]: String(stat.value).length, // phones: lets a long value like "100%" shrink to fit its box
+        }}
       >
         {stat.value}
       </span>
@@ -72,14 +78,15 @@ function formatGameDate(dateStr: string): string {
   return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
 }
 
-export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null, hideResult = false, failed = false, noGame = false, severalFailed = false, onRetry, onCompare, compareSelected = false }: PlayerCardProps) {
+export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn = false, fantasy = null, hideResult = false, failed = false, noGame = false, severalFailed = false, onRetry, onCompare, compareSelected = false, hideRemove = false, heroKey, footer }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
   const [useEspnPhoto, setUseEspnPhoto] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [expanded, setExpanded] = useState(false); // phones: show every stat instead of the first four
   const tutorial = useTutorial();
   const showRemoveHint = tutorial.showRemoveHint && tutorial.hintPlayerId === player.id;
 
-  const displayStats = stats ? getProminentStats(stats) : [];
+  const displayStats = stats ? (heroKey ? heroDisplayStats(stats, heroKey) : getProminentStats(stats)) : [];
   const hasNbaPhoto = hasNbaHeadshot(player);
   const headshotUrl = hasNbaPhoto && !useEspnPhoto
     ? getPlayerHeadshotUrl(player)
@@ -100,7 +107,7 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
 
   return (
     <div
-      className="group relative card-hover-glow rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02]"
+      className={`pc-card${expanded ? ' is-expanded' : ''} group relative card-hover-glow rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02]`}
       style={{
         background: 'var(--color-card)',
         border: '1px solid var(--color-border)',
@@ -114,6 +121,7 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
           Right after the tutorial finishes, it's forced visible and given a
           4-second pulsing ring on the just-added player's card so first-time
           visitors notice they can always remove a player. */}
+      {!hideRemove && (
       <button
         onClick={handleRemove}
         className={`remove-btn absolute top-2 right-2 z-20 w-6 h-6 rounded-full flex items-center justify-center transition-opacity duration-200 ${showRemoveHint ? '' : 'opacity-0 group-hover:opacity-100'}`}
@@ -131,6 +139,7 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
           <path d="M18 6L6 18M6 6l12 12"/>
         </svg>
       </button>
+      )}
 
       {/* Photo */}
       <div
@@ -185,11 +194,16 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
       <div className="p-3">
         <div className="mb-2">
           <h3
-            className="font-display font-700 text-base uppercase tracking-wide leading-tight"
+            className="pc-name font-display font-700 text-base uppercase tracking-wide leading-tight"
             style={{ color: 'var(--color-text-primary)' }}
           >
-            {player.first_name}{' '}
-            <span style={{ color: 'var(--skin-primary)' }}>{player.last_name}</span>
+            <span className="pc-first">{player.first_name}</span>{' '}
+            <span
+              className="pc-last"
+              style={{ color: 'var(--skin-primary)', ['--n' as string]: player.last_name.length }}
+            >
+              {player.last_name}
+            </span>
           </h3>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)' }}>
@@ -206,10 +220,11 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
           </div>
         </div>
 
-        {/* Game context */}
-        {stats && (
+        {/* Game context. On phones, cards without stats yet keep an invisible copy of
+            this row so every card has the same height. */}
+        {stats ? (
           <div
-            className="flex items-center justify-between mb-2 pb-2"
+            className="pc-game-row flex items-center justify-between mb-2 pb-2"
             style={{ borderBottom: '1px solid var(--color-border)' }}
           >
             <span className="font-mono text-[10px] uppercase tracking-widest font-500" style={{ color: 'var(--color-text-primary)', opacity: 0.7 }}>
@@ -226,14 +241,27 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
               </span>
             </div>
           </div>
+        ) : (
+          <div
+            className="pc-game-row pc-game-ghost items-center justify-between mb-2 pb-2"
+            style={{ borderBottom: '1px solid transparent' }}
+            aria-hidden="true"
+          >
+            <span className="font-mono text-[10px] uppercase tracking-widest font-500">vs ---</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[10px] font-700">-</span>
+              <span className="font-mono text-[10px]">---</span>
+            </div>
+          </div>
         )}
 
-        {/* Stats */}
+        {/* Stats. On phones: a fixed 2x2 of the four key stats; "+ more" shows the rest. */}
+        <div className="pc-stats-zone">
         {loading ? (
           <StatsSkeleton />
         ) : displayStats.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {displayStats.map(stat => <StatPill key={stat.key} stat={stat} />)}
+          <div className="pc-pill-grid">
+            {displayStats.map((stat, idx) => <StatPill key={stat.key} stat={stat} extra={idx >= 4} />)}
           </div>
         ) : failed ? (
           severalFailed ? (
@@ -267,11 +295,27 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
             No recent game data
           </p>
         )}
+        </div>
+
+        {/* Phones only: always takes the same space, so cards stay level whether or not
+            there is a button. Sits on its own row, clear of the stats and the Compare button. */}
+        <div className="pc-more-slot">
+          {!loading && displayStats.length > 4 && (
+            <button
+              type="button"
+              className="pc-more-btn"
+              onClick={() => setExpanded(e => !e)}
+              aria-expanded={expanded}
+            >
+              {expanded ? 'Less' : '+ more'}
+            </button>
+          )}
+        </div>
 
         {/* Fantasy mode: value score + hot/cold badge */}
         {fantasyOn && (
           <div
-            className="flex items-center justify-between mt-2.5 pt-2.5"
+            className="pc-fantasy-row flex items-center justify-between mt-2.5 pt-2.5"
             style={{ borderTop: '1px solid var(--color-border)' }}
           >
             {fantasy?.value != null ? (
@@ -317,6 +361,8 @@ export default function PlayerCard({ player, stats, loading, onRemove, fantasyOn
             {compareSelected ? 'Selected' : 'Compare'}
           </button>
         )}
+
+        {footer && <div className="mt-2.5">{footer}</div>}
       </div>
     </div>
   );

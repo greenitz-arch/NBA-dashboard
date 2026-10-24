@@ -357,3 +357,117 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .suggest-add-btn { animation: none; }
 }
+
+
+/* ─── Player cards: equal height on phones ──────────────────────────────────
+   Phones (under 640px) show the four key stats in a fixed 2x2 and a "+ more"
+   button reveals the rest. Every part reserves its space, so all cards match.
+   Tablets and desktop keep the original layout. */
+.pc-pill-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-more-slot { display: none; }
+.pc-game-ghost { display: none; }
+
+@media (max-width: 639px) {
+  .pc-name { min-height: 2.5rem; }
+  .pc-first, .pc-last {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* The name block measures itself; a long last name (e.g. Gilgeous-Alexander) steps its
+     text down just enough to fit on one line, so every card keeps the same name height. */
+  .pc-name { container-type: inline-size; }
+  .pc-last { font-size: min(1rem, max(9px, calc(100cqw / (var(--n, 8) * 0.62)))); }
+  /* the game line is always two lines (opponent, then result + date) at a fixed height */
+  .pc-game-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    gap: 2px;
+    height: 44px;
+  }
+  .pc-game-ghost { display: flex; visibility: hidden; }
+  .pc-stats-zone { min-height: 98px; }
+  .pc-pill-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .pc-pill-grid .pc-pill {
+    min-width: 0 !important;
+    height: 46px;
+    justify-content: center;
+    padding: 0 4px !important;
+  }
+  .pc-pill-grid .pc-extra { display: none !important; }
+  .pc-card.is-expanded .pc-pill-grid .pc-extra { display: flex !important; }
+  .pc-more-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    margin-top: 6px;
+  }
+  .pc-more-btn {
+    font-family: var(--font-mono), monospace;
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--neon-orange);
+    background: transparent;
+    border: 1px solid var(--neon-orange);
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .pc-fantasy-row { min-height: 40px; }
+}
+
+
+/* ─── Phones: a shorter top of the page, so the roster is in view ───────────
+   One shared header height (96px, 56px on phones) that the side menu and the
+   skin bar also follow. Everything below only applies under 640px. */
+:root { --header-h: 96px; }
+
+@media (max-width: 639px) {
+  :root { --header-h: 56px; }
+
+  /* Pills: Player news, Add to Home Screen, No spoilers, Fantasy mode.
+     Small, side by side, wrapping onto a second row only when needed. */
+  .mp-pills { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin-bottom: 12px; }
+  .mp-pills .mp-group { display: contents; }
+  .mp-pills .mp-group > * { min-height: 32px; padding: 4px 10px !important; gap: 6px !important; }
+  .mp-pills .mp-group > * span.font-display { font-size: 11px; letter-spacing: 0.03em; }
+  .mp-pills .mp-group > svg, .mp-pills .mp-group > * > svg { width: 14px; height: 14px; }
+  .mp-pills .mp-group > div > svg { display: none; } /* switch pills: skip the small icon to save width */
+  .mp-pills [role="switch"] { width: 36px !important; height: 20px !important; }
+  .mp-pills [role="switch"] > span {
+    width: 14px !important; height: 14px !important; top: 3px !important; left: 3px !important;
+    transition: transform 0.18s ease !important;
+  }
+  .mp-pills [role="switch"][aria-checked="true"] > span { transform: translateX(16px); }
+  /* the banner already offers "Add to Home Screen", so the pill waits until it is dismissed */
+  section:has(.ib-card) .install-pill { display: none; }
+
+  /* Title on one line, sized to the screen width (the title is about 14.3 times its font size wide) */
+  .mp-title { font-size: min(1.875rem, calc((100vw - 48px) / 14.6)) !important; white-space: nowrap; text-align: center; line-height: 1.2 !important; }
+  .mp-sub { font-size: 0.8125rem !important; margin: 6px 0 10px !important; text-align: center; }
+
+  /* "Add players" and the progress bar on one row */
+  .mp-top { display: grid; grid-template-columns: 1fr; align-items: center; column-gap: 12px; margin-bottom: 12px; }
+  .mp-top .mp-hero { display: contents; }
+  .mp-top .mp-title, .mp-top .mp-sub { grid-column: 1 / -1; }
+  .mp-top:has(.mp-add) { grid-template-columns: auto 1fr; }
+  .mp-top .mp-add { margin: 0 !important; padding: 8px 14px !important; font-size: 12px !important; justify-self: start; }
+  .mp-top .mp-progress { margin: 0 !important; }
+  .mp-top:not(:has(.mp-add)) .mp-progress { grid-column: 1 / -1; }
+}
+
+/* A long stat value (like "100%") shrinks just enough to fit its box on narrow phones. */
+@media (max-width: 639px) {
+  .pc-pill-grid .pc-pill { container-type: inline-size; }
+  .pc-pill-grid .stat-hero { --pv-size: 1.5rem; }
+  .pc-pill-grid .stat-highlight { --pv-size: 1.15rem; }
+  .pc-pill-grid .stat-standard, .pc-pill-grid .stat-negative { --pv-size: 0.95rem; }
+  .pc-pill-grid .pc-pill > span:first-child {
+    font-size: max(10px, min(var(--pv-size, 0.95rem), calc((100cqw - 6px) / (var(--vn, 2) * 0.5)))) !important;
+  }
+}

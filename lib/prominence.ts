@@ -3,8 +3,10 @@ import type { GameStats } from './nba';
 
 export type StatKey = 'pts' | 'reb' | 'ast' | 'stl' | 'blk' | 'turnover' | 'fg_pct' | 'fg3_pct' | 'ft_pct' | 'minutes' | 'plus_minus';
 
+export type HeroKey = 'pts' | 'reb' | 'ast' | 'stl' | 'blk' | 'fg3m';
+
 export interface DisplayStat {
-  key: StatKey;
+  key: StatKey | 'fg3m';
   label: string;
   value: string | number;
   rawValue: number;
@@ -91,4 +93,23 @@ export function computeDisplayStats(stats: GameStats): DisplayStat[] {
 
 export function getProminentStats(stats: GameStats): DisplayStat[] {
   return computeDisplayStats(stats).filter(s => s.prominence !== 'hidden');
+}
+
+// Smart Stats: same pills as the roster cards, but the stat that made the
+// player stand out is the big highlighted one (and only that one).
+export function heroDisplayStats(stats: GameStats, heroKey: HeroKey): DisplayStat[] {
+  const all = computeDisplayStats(stats);
+  const rest: DisplayStat[] = all
+    .filter(s => s.prominence !== 'hidden' && s.key !== heroKey)
+    .map(s => (s.prominence === 'hero' ? { ...s, prominence: 'highlight' as const } : s));
+  let hero: DisplayStat;
+  if (heroKey === 'fg3m') {
+    hero = { key: 'fg3m', label: '3PM', value: stats.fg3m, rawValue: stats.fg3m, prominence: 'hero' };
+  } else {
+    const found = all.find(s => s.key === heroKey);
+    hero = found
+      ? { ...found, prominence: 'hero' }
+      : { key: heroKey, label: STAT_LABELS[heroKey], value: stats[heroKey], rawValue: stats[heroKey], prominence: 'hero' };
+  }
+  return [hero, ...rest];
 }

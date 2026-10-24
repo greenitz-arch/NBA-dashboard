@@ -13,7 +13,7 @@ export default function SkinPickerBar() {
 
   return (
     <div
-      className="sticky top-24 z-20 overflow-x-auto"
+      className="sticky top-[var(--header-h)] z-20 overflow-x-auto"
       style={{
         background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',
